@@ -1,0 +1,29 @@
+{
+  "name": "notblox",
+  "version": "1.0.0",
+  "description": "Welcome to **Notblox**! This project showcases a simple multiplayer game engine built with Three.js and TypeScript, featuring an Entity Component System (ECS) for efficient network synchronization and utilizing Rapier.js for physics.",
+  "homepage": "https://github.com/iErcann/Notblox#readme",
+  "bugs": {
+    "url": "https://github.com/iErcann/Notblox/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iErcann/Notblox.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "''",
+  "scripts": {
+    "front": "cd front && npm run dev",
+    "back": "cd back && npm run dev",
+    "install": "concurrently \"cd back && npm install\" \"cd front && npm install\"",
+    "start": "concurrently \"npm run back\" \"npm run front\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

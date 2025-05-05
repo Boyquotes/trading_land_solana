@@ -1,0 +1,19 @@
+[
+    {
+      "title": "Trading Land",
+      "imageUrl": "/PreviewTestGame.webp",
+      "images": [
+        {
+          "url": "/PreviewTestGame.webp",
+          "width": 1920,
+          "height": 1080,
+          "alt": "Trading land Logo",
+          "type": "image/webp" 
+        } 
+      ],
+      "websocketPort": 8001,
+      "slug": "tld",
+      "metaDescription": "Trading game on solana. Enjoy!!",
+      "markdown": "Description more fun"
+    } 
+  ]
