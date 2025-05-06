@@ -32,22 +32,6 @@ DeFi on-chain games to manage our portfolio in 3D and 2D, launch in-game trade o
 - Trimesh Collider
 - Cars
 
-## Why ?
-
-Browser games are fun, but most of them are Unity WebGL exports that take a long time to load.
-I wanted to create a simple multiplayer game engine using Three.js and my own ECS. This project has in mind to be a simple and fast game engine that can be used to create simple multiplayer games with the modularity of ECS.
-
-### Multiplayer GTA-like ?
-
-I'm thinking about creating a GTA-like game with this engine. It would be a simple game with a city, cars, and players. The game would be server-authoritative, and the server would be able to spawn cars, NPCs, and other entities. The game would be a simple sandbox game where players can interact with each other and the environment.
-Inspiration : https://github.com/swift502/Sketchbook
-
-## Demo (Click on the images to see the video)
-
-[![Football with real players](GameScreen2.webp)](https://www.youtube.com/watch?v=7vBifZ2qG1k 'See on youtube')
-
-[![Demo](GameScreen3.webp)](https://www.youtube.com/watch?v=Uu3VCuyD9EA 'See on youtube')
-
 ## How to run locally
 
 ### Clone the repo
