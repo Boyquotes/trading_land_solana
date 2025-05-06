@@ -53,12 +53,12 @@
     --chart-5: 27 87% 67%;
   }
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --background: 220 40% 13%; /* blue night */
+    --foreground: 0 0% 98%; /* bright white for better visibility */
+    --card: 220 36% 17%;
+    --card-foreground: 220 30% 96%;
+    --popover: 220 36% 17%;
+    --popover-foreground: 220 30% 96%;
     --primary: 0 0% 98%;
     --primary-foreground: 0 0% 9%;
     --secondary: 0 0% 14.9%;
@@ -94,7 +94,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
   }
 }
  

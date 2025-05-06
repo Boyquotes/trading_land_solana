@@ -1,5 +1,6 @@
 // import GameCard from '@/components/GameCard'
 import GameContent from '@/components/GameContent'
+import ThemeSwitch from '@/components/ThemeSwitch'
 import KeyboardLayout from '@/components/KeyboardLayout'
 import Navbar from '@/components/Navbar'
 import { ExternalLink, Github, Twitter } from 'lucide-react'
@@ -41,7 +42,8 @@ const gameInfo = getGamesBySlug("tld")
 export default async function Home() {
   const games = gameData as GameInfo[]
   return (
-    <div className="space-y-8 flex flex-col items-center px-4 container">
+    <div className="space-y-8 flex flex-col items-center px-4 container bg-background text-foreground min-h-screen">
+      <div className="w-full flex justify-end pt-4"><ThemeSwitch /></div>
       <Navbar />
       <GameContent gameInfo={gameInfo} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

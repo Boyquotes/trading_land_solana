@@ -77,11 +77,11 @@ export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
 
             {/* Content Section - Smaller */}
             <div className="lg:w-1/3 flex flex-col justify-center space-y-6">
-              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900">{gameInfo.metaDescription}</h1>
+              <h1 className="text-4xl lg:text-5xl font-bold text-black dark:text-white">{gameInfo.metaDescription}</h1>
               <div className="flex flex-col space-y-4">
                 {/* Player Name Input */}
                 <div className="flex flex-col space-y-2">
-                  <label htmlFor="playerName" className="text-sm font-medium text-gray-700">
+                  <label htmlFor="playerName" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     Your Pseudo
                   </label>
                   <input
@@ -91,7 +91,7 @@ export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
                     onChange={(e) => setPlayerName(e.target.value)}
                     placeholder="Enter your name"
                     maxLength={20}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none dark:text-white dark:bg-gray-800"
                   />
                 </div>
                 <button
