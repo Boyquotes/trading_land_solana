@@ -10,16 +10,20 @@ import { MiniGameCard } from './GameCard'
 import Navbar from './Navbar'
 
 export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [playerName, setPlayerName] = useState<string>('')
+  const [mounted, setMounted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playerName, setPlayerName] = useState<string>('');
 
+  useEffect(() => setMounted(true), []);
   // Load player name from localStorage on component mount
   useEffect(() => {
-    const savedName = localStorage.getItem('playerName')
+    const savedName = localStorage.getItem('playerName');
     if (savedName) {
-      setPlayerName(savedName)
+      setPlayerName(savedName);
     }
-  }, [])
+  }, []);
+
+  if (!mounted) return null;
 
   const handlePlayClick = () => {
     // Save player name to localStorage

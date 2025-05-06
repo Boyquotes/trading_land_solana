@@ -1,5 +1,5 @@
 /* eslint-disable react/jsx-no-undef */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Joystick } from 'react-joystick-component'
 import { Game } from '@/game/Game'
 import Link from 'next/link'
@@ -12,7 +12,7 @@ import gameData from '../public/gameData.json'
 import { createSolanaClient, GetTokenAccountBalanceApi } from "gill";
 import { address } from "@solana/kit";
 import { Connection, GetProgramAccountsFilter, PublicKey, clusterApiUrl, ParsedAccountData } from "@solana/web3.js";
-import { TokenListProvider, TokenInfo } from '@solana/spl-token-registry';
+import { ENV, TokenListProvider, TokenInfo } from '@solana/spl-token-registry';
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { Metaplex } from '@metaplex-foundation/js';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
@@ -83,37 +83,37 @@ export default function GameHud({
   const walletToQuery = 'GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S'; //example: vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg
   
   async function getTokenAccounts(walletAddress: string, solanaConnection: Connection) {
-  const filters: GetProgramAccountsFilter[] = [
-    {
-      dataSize: 165, // size of account (bytes)
-    },
-    {
-      memcmp: {
-        offset: 32, // location of our query in the account (bytes)
-        bytes: walletAddress, // our search criteria, a base58 encoded string
+    const filters: GetProgramAccountsFilter[] = [
+      {
+        dataSize: 165, // size of account (bytes)
       },
-    },
-  ];
-  const accounts = await solanaConnection.getParsedProgramAccounts(
-    TOKEN_PROGRAM_ID,
-    { filters: filters }
-  );
-  console.log(`Found ${accounts.length} token account(s) for wallet ${walletAddress}.`);
-  const tokens: Array<{ mint: string; balance: number }> = [];
-  for (const [i, account] of accounts.entries()) {
-    // Parse the account data
-    const parsedAccountInfo: any = account.account.data;
-    const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
-    const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
-    // Log results
-    console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
-    console.log(`--Token Mint: ${mintAddress}`);
-    console.log(`--Token Balance: ${tokenBalance}`);
-    // Fetch and log token symbol and logo
-    await getTokenSymbol(mintAddress);
-    tokens.push({ mint: mintAddress, balance: tokenBalance });
-  }
-  return tokens;
+      {
+        memcmp: {
+          offset: 32, // location of our query in the account (bytes)
+          bytes: walletAddress, // our search criteria, a base58 encoded string
+        },
+      },
+    ];
+    const accounts = await solanaConnection.getParsedProgramAccounts(
+      TOKEN_PROGRAM_ID,
+      { filters: filters }
+    );
+    console.log(`Found ${accounts.length} token account(s) for wallet ${walletAddress}.`);
+    const tokens: Array<{ mint: string; balance: number }> = [];
+    for (const [i, account] of accounts.entries()) {
+      // Parse the account data
+      const parsedAccountInfo: any = account.account.data;
+      const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
+      const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
+      // Log results
+      console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
+      console.log(`--Token Mint: ${mintAddress}`);
+      console.log(`--Token Balance: ${tokenBalance}`);
+      // Fetch and log token symbol and logo
+      // await getTokenSymbol(mintAddress);
+      tokens.push({ mint: mintAddress, balance: tokenBalance });
+    }
+    return tokens;
 }
   // getTokenAccounts(walletToQuery,solanaConnection);
 
@@ -159,7 +159,12 @@ export default function GameHud({
       return;
     }
     console.log(tokenAccountInfo.value.data);
-    const { mintAuthority, supply, decimals, symbol } = tokenAccountInfo.value.data.parsed.info;
+    const info = tokenAccountInfo.value?.data?.parsed?.info;
+    if (!info) {
+      console.log('Token info not found!');
+      return;
+    }
+    const { mintAuthority, supply, decimals, symbol } = info;
   
     console.log(`Mint Authority: ${mintAuthority}`);
     console.log(`Symbol: ${symbol}`);
@@ -194,7 +199,7 @@ export default function GameHud({
   //   }
   // }
 
-  getTokenInfo('DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh')
+  // getTokenInfo('DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh')
 
   // async function fetchTokenMetadata() {
   //   try {
@@ -243,6 +248,7 @@ export default function GameHud({
   
     // Récupération des infos du token
     const tokenAccountInfo = await connection.getParsedAccountInfo(tokenMintAddress);
+    console.log(tokenAccountInfo)
   
     if (tokenAccountInfo.value === null) {
       console.log('Token mint not found!');
@@ -250,7 +256,12 @@ export default function GameHud({
     }
   
     const data = tokenAccountInfo.value.data as ParsedAccountData;
-    const { mintAuthority, supply, decimals } = data.parsed.info;
+    const info = data?.parsed?.info;
+    if (!info) {
+      console.log('Token info not found!');
+      return;
+    }
+    const { mintAuthority, supply, decimals } = info;
   
     console.log(`Mint Authority: ${mintAuthority}`);
     console.log(`Supply: ${supply}`);
@@ -272,7 +283,7 @@ export default function GameHud({
       console.log('Token metadata not found in the token list.');
     }
   }
-  getTokenSymbol(mintAddress)
+  // getTokenSymbol(mintAddress)
 
   async function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -307,17 +318,23 @@ async function findCoinGeckoId(symbol: string): Promise<number | null> {
 
   async function checkPortfolio() {
   if (addresses.length > 0) {
+    console.log("checkPortfolio");
+    console.log(addresses);
+    console.log(wallet);
+    
     let newWallet = { ...wallet };
     for (const address of addresses) {
       let tokenAccounts = await getTokenAccounts(address, solanaConnection);
       newWallet[address] = tokenAccounts;
     }
+    console.log("newWallet");
+    console.log(newWallet);
     setWallet(newWallet);
     console.log(newWallet);
   }
 }
 
-async function checkPricePortfolio() {
+async function checkPricePortfolio(wallet: any) {
   console.log("checkPricePortfolio");
   console.log(wallet);
   // If wallet is empty but addresses exist, auto-populate first
@@ -331,11 +348,12 @@ async function checkPricePortfolio() {
     // Map over tokens to update price
     console.log("address");
     console.log(address);
-    const updatedTokens = await Promise.all(wallet[address].map(async (token) => {
+    const updatedTokens = await Promise.all(wallet[address].map(async (token: any) => {
       const symbol = await getTokenSymbolReturnSymbol(token.mint);
       let price = null;
       if (symbol) {
         price = await findCoinGeckoId(symbol);
+        await sleep(1000);
         // Display in UI (for now, alert, but you can use a state for better UI)
         if (price !== null) {
           console.log(`${symbol.toUpperCase()} Price (USD): $${price}`);
@@ -350,9 +368,8 @@ async function checkPricePortfolio() {
 
 // Helper: getTokenSymbol but returns the symbol string
 async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string | null> {
-  const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
   const tokenMintAddress = new PublicKey(mintAddress);
-  const tokenAccountInfo = await connection.getParsedAccountInfo(tokenMintAddress);
+  const tokenAccountInfo = await solanaConnection.getParsedAccountInfo(tokenMintAddress);
   if (tokenAccountInfo.value === null) {
     console.log('Token mint not found!');
     return null;
@@ -468,6 +485,62 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
     })
   }, [messageComponents, gameInstance?.currentPlayerEntityId])
 
+  // Memoize tokenList and tokenMap for efficient lookup
+  const [tokenList, setTokenList] = useState<TokenInfo[]>([]);
+  const [tokenMap, setTokenMap] = useState<Map<string, TokenInfo>>(new Map());
+
+  useEffect(() => {
+    async function fetchTokenList() {
+      const provider = await new TokenListProvider().resolve();
+      const list = provider.filterByChainId(ENV.MainnetBeta).getList();
+      setTokenList(list);
+      setTokenMap(
+        list.reduce((map, item) => {
+          map.set(item.address, item);
+          return map;
+        }, new Map<string, TokenInfo>())
+      );
+    }
+    fetchTokenList();
+  }, []);
+
+  async function getTokenMetadata(walletAddress: string) {
+    const metaplex = Metaplex.make(solanaConnection);
+  
+    const mintAddress = new PublicKey(walletAddress);
+  
+    let tokenName;
+    let tokenSymbol;
+    let tokenLogo;
+  
+    const metadataAccount = metaplex
+      .nfts()
+      .pdas()
+      .metadata({ mint: mintAddress });
+  
+    const metadataAccountInfo = await solanaConnection.getAccountInfo(metadataAccount);
+  
+    if (metadataAccountInfo) {
+      console.log("found")
+      const token = await metaplex.nfts().findByMint({ mintAddress: mintAddress });
+      tokenName = token.name;
+      tokenSymbol = token.symbol;
+      tokenLogo = token.json?.image;
+    }
+    else {
+      console.log("not found")
+      // Use memoized tokenMap for lookup
+      const token = tokenMap.get(mintAddress.toBase58());
+      console.log(token)
+      if (token) {
+        tokenName = token.name;
+        tokenSymbol = token.symbol;
+        tokenLogo = token.logoURI;
+      }
+    }
+  }
+
+
   const handleFullscreenClick = () => {
     if (document.fullscreenElement) {
       document.exitFullscreen()
@@ -578,9 +651,17 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
       </div>
 
       <div className="flex justify-between items-center">
-        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {checkPricePortfolio();}}>
+        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {checkPricePortfolio(wallet);}}>
           <div className="text-sm flex justify-center text-white pointer-events-auto">
               <span className="font-medium">Check Portfolio Price</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {getTokenMetadata("3SghkPdBSrpF9bzdAy5LwR4nGgFbqNcC6ZSq8vtZdj91");}}>
+          <div className="text-sm flex justify-center text-white pointer-events-auto">
+              <span className="font-medium">Check Metadata</span>
           </div>
         </div>
       </div>

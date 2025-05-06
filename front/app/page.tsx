@@ -1,3 +1,4 @@
+"use client";
 // import GameCard from '@/components/GameCard'
 import GameContent from '@/components/GameContent'
 import ThemeSwitch from '@/components/ThemeSwitch'
@@ -7,27 +8,6 @@ import { ExternalLink, Github, Twitter } from 'lucide-react'
 import Link from 'next/link'
 import { GameInfo } from '../types'
 import gameData from '../public/gameData.json'
-import { Metadata } from 'next'
-
-export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: 'Trading Land - Solana games in your browser',
-    description:
-      'Solana games in your browser. Monitor your portfolio and trade with fun.',
-    openGraph: {
-      title: 'NotBlox - Play multiplayer games in your browser',
-      description:
-        'Play multiplayer games in your browser. Create your own games and share them with your friends.',
-      images: ['/PreviewTestGame.webp'],
-      siteName: 'Trading Land',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      site: '@Tradingland_SOL',
-      creator: '@Tradingland_SOL',
-    },
-  }
-}
 
 function getGamesBySlug(slug: string): GameInfo {
   const game = gameData.find((game) => game.slug === slug)
@@ -39,14 +19,14 @@ function getGamesBySlug(slug: string): GameInfo {
 
 const gameInfo = getGamesBySlug("tld")
 
-export default async function Home() {
+export default function Home() {
   const games = gameData as GameInfo[]
   return (
     <div className="space-y-8 flex flex-col items-center px-4 container bg-background text-foreground min-h-screen">
-      <div className="w-full flex justify-end pt-4"><ThemeSwitch /></div>
-      <Navbar />
-      <GameContent gameInfo={gameInfo} />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="w-full flex justify-end pt-4"><ThemeSwitch /></div>
+        <Navbar />
+        <GameContent gameInfo={gameInfo} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {games &&
           games.map((game, index) => (
             <div
@@ -60,32 +40,32 @@ export default async function Home() {
               {/* <GameContent {...game} /> */}
             </div>
           ))}
-      </div>
-      {/* <KeyboardLayout /> */}
+        </div>
+        {/* <KeyboardLayout /> */}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 my-4">
-        <Link
-          href={'https://discord.gg/kPhgtj49U2'}
-          className="flex py-2 items-center justify-center   px-8   font-medium   border border-transparent rounded-md hover:bg-gray-100   md:text-lg md:px-10"
-        >
-          <ExternalLink className="mr-2" />
-          Discord
-        </Link>
-        <Link
-          href={'https://twitter.com/Tradingland_SOL'}
-          className="flex py-2 items-center justify-center  px-8   font-medium   border border-transparent rounded-md hover:bg-gray-100    md:text-lg md:px-10"
-        >
-          <Twitter className="mr-2" />
-          Twitter
-        </Link>
-        <Link
-          href={'https://github.com/Boyquotes'}
-          className="flex py-2 items-center justify-center   px-8   font-medium  border border-transparent rounded-md hover:bg-gray-100   md:text-lg md:px-10"
-        >
-          <Github className="mr-2" />
-          Source Code
-        </Link>
-      </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 my-4">
+          <Link
+            href={'https://discord.gg/kPhgtj49U2'}
+            className="flex py-2 items-center justify-center   px-8   font-medium   border border-transparent rounded-md hover:bg-gray-100   md:text-lg md:px-10"
+          >
+            <ExternalLink className="mr-2" />
+            Discord
+          </Link>
+          <Link
+            href={'https://twitter.com/Tradingland_SOL'}
+            className="flex py-2 items-center justify-center  px-8   font-medium   border border-transparent rounded-md hover:bg-gray-100    md:text-lg md:px-10"
+          >
+            <Twitter className="mr-2" />
+            Twitter
+          </Link>
+          <Link
+            href={'https://github.com/Boyquotes'}
+            className="flex py-2 items-center justify-center   px-8   font-medium  border border-transparent rounded-md hover:bg-gray-100   md:text-lg md:px-10"
+          >
+            <Github className="mr-2" />
+            Source Code
+          </Link>
+        </div>
     </div>
   )
 }

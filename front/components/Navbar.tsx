@@ -15,6 +15,7 @@ export default function Navbar() {
       console.log('Theme changed:', resolvedTheme);
     }
   }, [resolvedTheme, mounted]);
+  if (!mounted) return null;
   return (
     <section className="w-full">
       <div className="flex items-center justify-between">
