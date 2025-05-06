@@ -99,6 +99,15 @@ export default function GameHud({
       { filters: filters }
     );
     console.log(`Found ${accounts.length} token account(s) for wallet ${walletAddress}.`);
+
+    // For each token account, get mint address and call getTokenMetadata
+    for (const account of accounts) {
+      const parsedAccountInfo: any = account.account.data;
+      const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
+      // Call getTokenMetadata and log the result
+      const metadata = await getTokenMetadata(mintAddress);
+      console.log('Token metadata:', metadata);
+    }
     const tokens: Array<{ mint: string; balance: number }> = [];
     for (const [i, account] of accounts.entries()) {
       // Parse the account data
@@ -504,14 +513,14 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
     fetchTokenList();
   }, []);
 
-  async function getTokenMetadata(walletAddress: string) {
+  async function getTokenMetadata(mintStrAddress: string): Promise<{ name: string | null, symbol: string | null, logo: string | null }> {
     const metaplex = Metaplex.make(solanaConnection);
   
-    const mintAddress = new PublicKey(walletAddress);
+    const mintAddress = new PublicKey(mintStrAddress);
   
-    let tokenName;
-    let tokenSymbol;
-    let tokenLogo;
+    let tokenName: string | null = null;
+    let tokenSymbol: string | null = null;
+    let tokenLogo: string | null = null;
   
     const metadataAccount = metaplex
       .nfts()
@@ -523,9 +532,9 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
     if (metadataAccountInfo) {
       console.log("found")
       const token = await metaplex.nfts().findByMint({ mintAddress: mintAddress });
-      tokenName = token.name;
-      tokenSymbol = token.symbol;
-      tokenLogo = token.json?.image;
+      tokenName = token.name || null;
+      tokenSymbol = token.symbol || null;
+      tokenLogo = token.json?.image || null;
     }
     else {
       console.log("not found")
@@ -533,11 +542,12 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
       const token = tokenMap.get(mintAddress.toBase58());
       console.log(token)
       if (token) {
-        tokenName = token.name;
-        tokenSymbol = token.symbol;
-        tokenLogo = token.logoURI;
+        tokenName = token.name || null;
+        tokenSymbol = token.symbol || null;
+        tokenLogo = token.logoURI || null;
       }
     }
+    return { name: tokenName, symbol: tokenSymbol, logo: tokenLogo };
   }
 
 
