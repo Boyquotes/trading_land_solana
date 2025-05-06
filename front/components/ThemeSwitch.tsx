@@ -1,35 +1,21 @@
 "use client";
-import React, { useEffect, useState } from 'react';
-
-const THEME_KEY = 'theme';
+import React from 'react';
+import { useTheme } from 'next-themes';
 
 export default function ThemeSwitch() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
 
-  useEffect(() => {
-    // On mount, set default to dark and check localStorage
-    const savedTheme = typeof window !== 'undefined' ? localStorage.getItem(THEME_KEY) : null;
-    if (savedTheme === 'light' || savedTheme === 'dark') {
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
-    } else {
-      setTheme('dark');
-      document.documentElement.classList.add('dark');
-      localStorage.setItem(THEME_KEY, 'dark');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    document.documentElement.classList.toggle('dark', nextTheme === 'dark');
-    localStorage.setItem(THEME_KEY, nextTheme);
-  };
+  if (!mounted) {
+    // Render a placeholder for hydration safety
+    return <button className="w-14 h-8" aria-label="Toggle Dark/Light Theme" disabled />;
+  }
 
   return (
     <button
       aria-label="Toggle Dark/Light Theme"
-      onClick={toggleTheme}
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       className="relative flex items-center w-14 h-8 rounded-full border-2 border-gray-400 dark:border-[#3b4252] bg-gradient-to-r from-gray-200 via-white to-gray-300 dark:from-[#222c3a] dark:via-[#151c2c] dark:to-[#1e253a] shadow-inner transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
     >
       {/* Track */}

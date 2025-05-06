@@ -33,6 +33,8 @@ export default function GameHud({
   sendMessage,
   gameInstance,
 }: GameHudProps) {
+  const [addresses, setAddresses] = useState<string[]>([]);
+  const [wallet, setWallet] = useState<{[address: string]: Array<{mint: string, balance: number}>}>({});
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const refContainer = useRef<HTMLDivElement>(null)
   const [notifications, setNotifications] = useState<
@@ -80,34 +82,42 @@ export default function GameHud({
   
   const walletToQuery = 'GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S'; //example: vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg
   
-  async function getTokenAccounts(wallet: string, solanaConnection: Connection) {
-      const filters:GetProgramAccountsFilter[] = [
-          {
-            dataSize: 165,    //size of account (bytes)
-          },
-          {
-            memcmp: {
-              offset: 32,     //location of our query in the account (bytes)
-              bytes: wallet,  //our search criteria, a base58 encoded string
-            },            
-          }];
-      const accounts = await solanaConnection.getParsedProgramAccounts(
-          TOKEN_PROGRAM_ID, //new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-          {filters: filters}
-      );
-      console.log(`Found ${accounts.length} token account(s) for wallet ${wallet}.`);
-      accounts.forEach((account, i) => {
-          //Parse the account data
-          const parsedAccountInfo:any = account.account.data;
-          const mintAddress:string = parsedAccountInfo["parsed"]["info"]["mint"];
-          const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
-          //Log results
-          console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
-          console.log(`--Token Mint: ${mintAddress}`);
-          console.log(`--Token Balance: ${tokenBalance}`);
-      });
+  async function getTokenAccounts(walletAddress: string, solanaConnection: Connection) {
+  const filters: GetProgramAccountsFilter[] = [
+    {
+      dataSize: 165, // size of account (bytes)
+    },
+    {
+      memcmp: {
+        offset: 32, // location of our query in the account (bytes)
+        bytes: walletAddress, // our search criteria, a base58 encoded string
+      },
+    },
+  ];
+  const accounts = await solanaConnection.getParsedProgramAccounts(
+    TOKEN_PROGRAM_ID,
+    { filters: filters }
+  );
+  console.log(`Found ${accounts.length} token account(s) for wallet ${walletAddress}.`);
+  const tokens: Array<{ mint: string; balance: number }> = [];
+  for (const [i, account] of accounts.entries()) {
+    // Parse the account data
+    const parsedAccountInfo: any = account.account.data;
+    const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
+    const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
+    // Log results
+    console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
+    console.log(`--Token Mint: ${mintAddress}`);
+    console.log(`--Token Balance: ${tokenBalance}`);
+    // Fetch and log token symbol and logo
+    await getTokenSymbol(mintAddress);
+    tokens.push({ mint: mintAddress, balance: tokenBalance });
   }
-  getTokenAccounts(walletToQuery,solanaConnection);
+  return tokens;
+}
+  // getTokenAccounts(walletToQuery,solanaConnection);
+
+
 
   // const NEXT_PUBLIC_SOLSCAN_API_KEY = 'YOUR_API_KEY';
   const mintAddress = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
@@ -226,10 +236,10 @@ export default function GameHud({
   //   }
   // }
   // getFungibleTokenMetadata();
-  const TOKEN_MINT_ADDRESS = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
-  async function getTokenSymbol(): Promise<void> {
+  // const TOKEN_MINT_ADDRESS = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
+  async function getTokenSymbol(mintAddress: string): Promise<void> {
     const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-    const tokenMintAddress = new PublicKey(TOKEN_MINT_ADDRESS);
+    const tokenMintAddress = new PublicKey(mintAddress);
   
     // Récupération des infos du token
     const tokenAccountInfo = await connection.getParsedAccountInfo(tokenMintAddress);
@@ -252,7 +262,7 @@ export default function GameHud({
     const tokenListData: TokenInfo[] = tokenList.getList();
   
     const tokenInfo = tokenListData.find(
-      (token) => token.address === TOKEN_MINT_ADDRESS
+      (token) => token.address === mintAddress
     );
   
     if (tokenInfo) {
@@ -262,54 +272,116 @@ export default function GameHud({
       console.log('Token metadata not found in the token list.');
     }
   }
-  getTokenSymbol()
+  getTokenSymbol(mintAddress)
 
   async function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async function findCoinGeckoId(symbol: string) {
-    const url = 'https://api.coingecko.com/api/v3/coins/list';
-  
-    try {
-      const res = await fetch(url);
-      const coins = await res.json();
-  
-      const match = coins.find(
-        (coin: any) => coin.symbol.toLowerCase() === symbol.toLowerCase()
-      );
-  
-      if (!match) {
-        console.log(`No CoinGecko ID found for symbol: ${symbol}`);
-        return;
-      }
-  
-      console.log(`Found CoinGecko ID: ${match.id}`);
-  
-      // Optionally fetch price
-      const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${match.id}&vs_currencies=usd`);
-      const priceData = await priceRes.json();
-      console.log(`${symbol.toUpperCase()} Price (USD):`, priceData[match.id]?.usd);
-      await sleep(500);
-    } catch (err) {
-      console.error('Error:', err);
+  // Refactored: returns price
+async function findCoinGeckoId(symbol: string): Promise<number | null> {
+  const url = 'https://api.coingecko.com/api/v3/coins/list';
+  try {
+    const res = await fetch(url);
+    const coins = await res.json();
+    const match = coins.find((coin: any) => coin.symbol.toLowerCase() === symbol.toLowerCase());
+    if (!match) {
+      console.log(`No CoinGecko ID found for symbol: ${symbol}`);
+      return null;
     }
+    console.log(`Found CoinGecko ID: ${match.id}`);
+    // Fetch price
+    const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${match.id}&vs_currencies=usd`);
+    const priceData = await priceRes.json();
+    const price = priceData[match.id]?.usd ?? null;
+    console.log(`${symbol.toUpperCase()} Price (USD):`, price);
+    await sleep(500);
+    return price;
+  } catch (err) {
+    console.error('Error:', err);
+    return null;
   }
+}
   
-  findCoinGeckoId('DFL');
-  
+  // findCoinGeckoId('DFL');
+
+  async function checkPortfolio() {
+  if (addresses.length > 0) {
+    let newWallet = { ...wallet };
+    for (const address of addresses) {
+      let tokenAccounts = await getTokenAccounts(address, solanaConnection);
+      newWallet[address] = tokenAccounts;
+    }
+    setWallet(newWallet);
+    console.log(newWallet);
+  }
+}
+
+async function checkPricePortfolio() {
+  console.log("checkPricePortfolio");
+  console.log(wallet);
+  // If wallet is empty but addresses exist, auto-populate first
+  if (Object.keys(wallet).length === 0 && addresses.length > 0) {
+    console.log("Wallet empty, calling checkPortfolio first...");
+    await checkPortfolio();
+  }
+  // Copy wallet to mutate
+  let newWallet = { ...wallet };
+  for (const address in wallet) {
+    // Map over tokens to update price
+    console.log("address");
+    console.log(address);
+    const updatedTokens = await Promise.all(wallet[address].map(async (token) => {
+      const symbol = await getTokenSymbolReturnSymbol(token.mint);
+      let price = null;
+      if (symbol) {
+        price = await findCoinGeckoId(symbol);
+        // Display in UI (for now, alert, but you can use a state for better UI)
+        if (price !== null) {
+          console.log(`${symbol.toUpperCase()} Price (USD): $${price}`);
+        }
+      }
+      return { ...token, symbol, price };
+    }));
+    newWallet[address] = updatedTokens;
+  }
+  setWallet(newWallet);
+}
+
+// Helper: getTokenSymbol but returns the symbol string
+async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string | null> {
+  const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+  const tokenMintAddress = new PublicKey(mintAddress);
+  const tokenAccountInfo = await connection.getParsedAccountInfo(tokenMintAddress);
+  if (tokenAccountInfo.value === null) {
+    console.log('Token mint not found!');
+    return null;
+  }
+  const data = tokenAccountInfo.value.data as ParsedAccountData;
+  // Try to get symbol from token list
+  const tokenListProvider = new TokenListProvider();
+  const tokenList = await tokenListProvider.resolve();
+  const tokenListData: TokenInfo[] = tokenList.getList();
+  const tokenInfo = tokenListData.find((token) => token.address === mintAddress);
+  if (tokenInfo) {
+    return tokenInfo.symbol;
+  } else {
+    console.log('Token metadata not found in the token list.');
+    return null;
+  }
+}
 
   async function connectSolana() {
-    let addresses: string[] = [];
     let address= '';
+    let newAddresses = [...addresses];
     if (window.phantom) {
         console.log("Le wallet phantom est installé.");
         try {
-            const response = await window.phantom.solana.connect({ onlyIfTrusted: true });
+            const response = await window.phantom.solana.connect({ onlyIfTrusted: false });
             console.log("Connected to wallet:", response.publicKey.toString());
             address = response.publicKey.toString();
-            if (!addresses.includes(address)) {
-              addresses.push(address);
+            if (!newAddresses.includes(address)) {
+              newAddresses.push(address);
             }
         } catch (error) {
           console.error("Not connected :", error);
@@ -322,8 +394,8 @@ export default function GameHud({
             if (isConnected){
                 response = window.solflare;
                 console.log("Connected to wallet:", response.publicKey.toString());
-                if (!addresses.includes(address)) {
-                  addresses.push(address);
+                if (!newAddresses.includes(address)) {
+                  newAddresses.push(address);
                 }
             }
         } catch (error) {
@@ -343,8 +415,9 @@ export default function GameHud({
           console.error("Not connected :", error);
         }
     }
-    console.log(addresses)
-    return addresses;
+    setAddresses(newAddresses);
+    console.log(newAddresses)
+    return newAddresses;
   }
 
   useEffect(() => {
@@ -492,6 +565,22 @@ export default function GameHud({
         <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {connectSolana();}}>
           <div className="text-sm flex justify-center text-white pointer-events-auto">
               <span className="font-medium">Connect Wallet</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {checkPortfolio();}}>
+          <div className="text-sm flex justify-center text-white pointer-events-auto">
+              <span className="font-medium">Check Portfolio</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {checkPricePortfolio();}}>
+          <div className="text-sm flex justify-center text-white pointer-events-auto">
+              <span className="font-medium">Check Portfolio Price</span>
           </div>
         </div>
       </div>

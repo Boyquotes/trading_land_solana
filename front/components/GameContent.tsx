@@ -77,7 +77,7 @@ export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
 
             {/* Content Section - Smaller */}
             <div className="lg:w-1/3 flex flex-col justify-center space-y-6">
-              <h1 className="text-4xl lg:text-5xl font-bold text-black dark:text-white">{gameInfo.metaDescription}</h1>
+              {/* <h1 className="text-4xl lg:text-5xl font-bold text-black dark:text-white">{gameInfo.metaDescription}</h1> */}
               <div className="flex flex-col space-y-4">
                 {/* Player Name Input */}
                 <div className="flex flex-col space-y-2">
