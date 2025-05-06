@@ -109,8 +109,8 @@ export default function GameHud({
   }
   getTokenAccounts(walletToQuery,solanaConnection);
 
-  const NEXT_PUBLIC_SOLSCAN_API_KEY = 'YOUR_API_KEY';
-  const TOKEN_ADDRESS = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
+  // const NEXT_PUBLIC_SOLSCAN_API_KEY = 'YOUR_API_KEY';
+  const mintAddress = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
 
   // async function getTokenInfoPrice(address: string) {
   //   try {
@@ -134,12 +134,12 @@ export default function GameHud({
   // const metaplex = new Metaplex(solanaConnection);
   // const mint = new PublicKey('DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh');
 
-  async function getTokenInfo() {
+  async function getTokenInfo(mintAddress: string) {
     // Connect to the Solana devnet (you can change to 'mainnet-beta' for mainnet)
     // const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
   
     // The public key of the token mint address
-    const tokenMintAddress = new PublicKey(TOKEN_ADDRESS);
+    const tokenMintAddress = new PublicKey(mintAddress);
   
     // Get token supply and decimals
     const tokenAccountInfo = await solanaConnection.getParsedAccountInfo(tokenMintAddress);
@@ -184,7 +184,7 @@ export default function GameHud({
   //   }
   // }
 
-  getTokenInfo()
+  getTokenInfo('DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh')
 
   // async function fetchTokenMetadata() {
   //   try {

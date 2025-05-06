@@ -1,4 +1,5 @@
-import GameCard from '@/components/GameCard'
+// import GameCard from '@/components/GameCard'
+import GameContent from '@/components/GameContent'
 import KeyboardLayout from '@/components/KeyboardLayout'
 import Navbar from '@/components/Navbar'
 import { ExternalLink, Github, Twitter } from 'lucide-react'
@@ -21,17 +22,28 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: 'summary_large_image',
-      site: '@Boyquotes',
-      creator: '@Boyquotes',
+      site: '@Tradingland_SOL',
+      creator: '@Tradingland_SOL',
     },
   }
 }
+
+function getGamesBySlug(slug: string): GameInfo {
+  const game = gameData.find((game) => game.slug === slug)
+  if (!game) {
+    throw new Error(`Game with slug "${slug}" not found`)
+  }
+  return game
+}
+
+const gameInfo = getGamesBySlug("tld")
 
 export default async function Home() {
   const games = gameData as GameInfo[]
   return (
     <div className="space-y-8 flex flex-col items-center px-4 container">
       <Navbar />
+      <GameContent gameInfo={gameInfo} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {games &&
           games.map((game, index) => (
@@ -42,11 +54,12 @@ export default async function Home() {
               }`}
               key={index}
             >
-              <GameCard {...game} />
+              {/* <GameCard {...game} /> */}
+              {/* <GameContent {...game} /> */}
             </div>
           ))}
       </div>
-      <KeyboardLayout />
+      {/* <KeyboardLayout /> */}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3 my-4">
         <Link
@@ -57,7 +70,7 @@ export default async function Home() {
           Discord
         </Link>
         <Link
-          href={'https://twitter.com/Boyquotes'}
+          href={'https://twitter.com/Tradingland_SOL'}
           className="flex py-2 items-center justify-center  px-8   font-medium   border border-transparent rounded-md hover:bg-gray-100    md:text-lg md:px-10"
         >
           <Twitter className="mr-2" />

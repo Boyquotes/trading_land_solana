@@ -35,7 +35,7 @@ export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
         <GamePlayer {...gameInfo} playerName={playerName} />
       ) : (
         <div className="px-4 container mx-auto">
-          <Navbar />
+          {/* <Navbar /> */}
           <div className="flex flex-col lg:flex-row gap-8 mb-12">
             {/* Image Section - Larger and Clickable */}
             <div className="lg:w-2/3 cursor-pointer" onClick={handlePlayClick}>
@@ -77,13 +77,12 @@ export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
 
             {/* Content Section - Smaller */}
             <div className="lg:w-1/3 flex flex-col justify-center space-y-6">
-              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900">{gameInfo.title}</h1>
-              <p className="text-gray-600 text-lg leading-relaxed">{gameInfo.metaDescription}</p>
+              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900">{gameInfo.metaDescription}</h1>
               <div className="flex flex-col space-y-4">
                 {/* Player Name Input */}
                 <div className="flex flex-col space-y-2">
                   <label htmlFor="playerName" className="text-sm font-medium text-gray-700">
-                    Your Player Name
+                    Your Pseudo
                   </label>
                   <input
                     type="text"
@@ -105,14 +104,14 @@ export default function GameContent({ gameInfo }: { gameInfo: GameInfo }) {
             </div>
           </div>
           {/* Related Games */}
-          <section className="w-full">
+          {/* <section className="w-full">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 px-4 sm:px-0">More Games</h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {gameData.map((game) => (
                 <MiniGameCard {...game} key={game.slug} />
               ))}
             </div>
-          </section>
+          </section> */}
           {/* Markdown Content */}
           <section className="w-full mt-12 bg-white p-4 md:p-8 rounded-2xl drop-shadow-sm border border-gray-200">
             <div className="prose max-w-none">
