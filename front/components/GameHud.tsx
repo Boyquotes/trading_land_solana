@@ -111,18 +111,25 @@ export default function GameHud({
       const metadata = await getTokenMetadata(mintAddress);
       console.log('Token metadata:', metadata);
     }
-    // Build tokens array with metadata
-    const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null }> = [];
+    // Build tokens array with metadata, with delay between calls
+    const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean }> = [];
     for (const [i, account] of accounts.entries()) {
       // Parse the account data
       const parsedAccountInfo: any = account.account.data;
       const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
       const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
-      // Get token metadata
+      const decimals: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["decimals"];
+      // Get token metadata with 550ms delay
       const metadata = await getTokenMetadata(mintAddress);
+      // Heuristic: NFT if decimals === 0 and balance === 1
+      const tokenIsNFT = decimals === 0 && tokenBalance === 1;
       // Log results
       console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
-      tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata });
+      tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT });
+      // Wait 550ms before next call
+      if (i < accounts.length - 1) {
+        await new Promise(res => setTimeout(res, 550));
+      }
     }
     // Store in state by wallet address
     setTokenAccountsByWallet(prev => ({ ...prev, [walletAddress]: tokens }))
@@ -519,16 +526,22 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
     fetchTokenList();
   }, []);
 
-  async function getTokenMetadata(mintStrAddress: string): Promise<{ name: string | null, symbol: string | null, logo: string | null, tokenIsNFT: boolean }> {
+  async function getTokenMetadata(mintStrAddress: string): Promise<{ name: string | null, symbol: string | null, logo: string | null }> {
     const metaplex = Metaplex.make(solanaConnection);
   
     const mintAddress = new PublicKey(mintStrAddress);
   
-    let tokenName: string | null = null;
-    let tokenSymbol: string | null = null;
-    let tokenLogo: string | null = null;
-    let tokenIsNFT: boolean = false;
+    // 1. Try to get from tokenMap (fast, no network)
+    const token = tokenMap.get(mintAddress.toBase58());
+    if (token) {
+      return {
+        name: token.name || null,
+        symbol: token.symbol || null,
+        logo: token.logoURI || null
+      };
+    }
   
+    // 2. Fallback: query Metaplex metadata (network request)
     const metadataAccount = metaplex
       .nfts()
       .pdas()
@@ -538,36 +551,16 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
   
     if (metadataAccountInfo) {
       console.log("found")
-      console.log(metadataAccountInfo)
-      const token = await metaplex.nfts().findByMint({ mintAddress: mintAddress });
-      console.log("token")
-      console.log(token)
-      tokenName = token.name || null;
-      tokenSymbol = token.symbol || null;
-      tokenLogo = token.json?.image || null;
-      // Heuristic: check if this is an NFT
-      if (
-        token.standard === 'NonFungible' ||
-        token.json?.properties?.category === 'nft' ||
-        (token.mint && token.supply === 1 && token.decimals === 0)
-      ) {
-        tokenIsNFT = true;
-      }
-    }
-    else {
+      const tokenMeta = await metaplex.nfts().findByMint({ mintAddress: mintAddress });
+      return {
+        name: tokenMeta.name || null,
+        symbol: tokenMeta.symbol || null,
+        logo: tokenMeta.json?.image || null
+      };
+    } else {
       console.log("not found")
-      // Use memoized tokenMap for lookup
-      const token = tokenMap.get(mintAddress.toBase58());
-      console.log(token)
-      if (token) {
-        tokenName = token.name || null;
-        tokenSymbol = token.symbol || null;
-        tokenLogo = token.logoURI || null;
-        // SPL-token-registry tokens are almost always fungible
-        tokenIsNFT = false;
-      }
+      return { name: null, symbol: null, logo: null };
     }
-    return { name: tokenName, symbol: tokenSymbol, logo: tokenLogo, tokenIsNFT };
   }
 
 
