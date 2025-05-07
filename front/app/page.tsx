@@ -22,7 +22,7 @@ const gameInfo = getGamesBySlug("tld")
 export default function Home() {
   const games = gameData as GameInfo[]
   return (
-    <div className="space-y-8 flex flex-col items-center px-4 container bg-background text-foreground min-h-screen">
+    <div className="flex flex-col items-center px-4 container bg-background text-foreground min-h-screen">
         <div className="w-full flex justify-end pt-4"><ThemeSwitch /></div>
         <Navbar />
         <GameContent gameInfo={gameInfo} />

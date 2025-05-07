@@ -31,7 +31,6 @@ declare global {
   }
 }
 
-
 export interface GameHudProps {
   messages: MessageComponent[]
   sendMessage: (message: string) => void
@@ -164,37 +163,8 @@ export default function GameHud({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  async function callSol() {
-    const { rpc } = createSolanaClient({ urlOrMoniker: "devnet" });
-    
-    // get slot
-    const slot = await rpc.getSlot().send();
-    
-    // get the latest blockhash
-    const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
-    console.log(latestBlockhash)
-    const { value: account } = await rpc.getAccountInfo(address("GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S")).send();
-    console.log("account")
-    console.log(account)
-
-    // if (typeof window.solana !== 'undefined') {
-    //   console.log("solana in da place")
-    //   const provider = window.solana;
-    //   console.log(provider)
-    //   if (provider.isPhantom) {
-    //     console.log("Phantom ok");
-    //     const response = await window.phantom.solana.connect({ onlyIfTrusted: true });
-    //     console.log("Connected to wallet:", response.publicKey.toString());
-    //   }
-    // }
-
-  }
-  // callSol()
-
   const rpcEndpoint = process.env.NEXT_PUBLIC_RPC_URL;
   const solanaConnection = new Connection(rpcEndpoint);
-  
-  const walletToQuery = 'GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S'; //example: vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg
   
   // State: Map wallet address to tokens array
   const [tokenAccountsByWallet, setTokenAccountsByWallet] = useState<{ [wallet: string]: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null }> }>({});
@@ -250,33 +220,7 @@ export default function GameHud({
     console.log("tokenAccountsByWallet")
     
     return tokens;
-}
-  // getTokenAccounts(walletToQuery,solanaConnection);
-
-  // const NEXT_PUBLIC_SOLSCAN_API_KEY = 'YOUR_API_KEY';
-  const mintAddress = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
-
-  // async function getTokenInfoPrice(address: string) {
-  //   try {
- 
-  //     // Step 2: Call CoinGecko to get token price (requires mapping symbol to a CoinGecko ID)
-  //     const marketRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price`, {
-  //       params: {
-  //         ids: 'defi-land', // CoinGecko ID for DFL
-  //         vs_currencies: 'usd',
-  //       },
-  //     });
-  
-  //     const price = marketRes.data['defi-land'].usd;
-  //     console.log(`Price: $${price}`);
-  //   } catch (error) {
-  //     console.error('Error fetching token info:', error);
-  //   }
-  // }
-  // getTokenInfoPrice(TOKEN_ADDRESS);
-
-  // const metaplex = new Metaplex(solanaConnection);
-  // const mint = new PublicKey('DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh');
+  }
 
   async function getTokenInfo(mintAddress: string) {
     // Connect to the Solana devnet (you can change to 'mainnet-beta' for mainnet)
@@ -306,76 +250,6 @@ export default function GameHud({
     console.log(`Decimals: ${decimals}`);
   }
 
-  // async function getTokenInfo() {
-  //   const mint = new PublicKey(TOKEN_ADDRESS);
-  
-  //   // Step 1: Get decimals and supply
-  //   const mintInfo = await connection.getParsedAccountInfo(mint);
-  //   if (!mintInfo.value) {
-  //     console.log('Token mint not found!');
-  //     return;
-  //   }
-  
-  //   const parsed = (mintInfo.value.data as any).parsed.info;
-  //   console.log(`Decimals: ${parsed.decimals}`);
-  //   console.log(`Supply: ${parsed.supply}`);
-  //   console.log(`Mint Authority: ${parsed.mintAuthority}`);
-  
-  //   // Step 2: Get symbol and name from metadata
-  //   try {
-  //     const metadataPDA = findMetadataPda(mint);
-  //     const metadata = await Metadata.fromAccountAddress(connection, metadataPDA);
-  //     console.log(`Symbol: ${metadata.data.symbol.trim()}`);
-  //     console.log(`Name: ${metadata.data.name.trim()}`);
-  //     console.log(`URI: ${metadata.data.uri.trim()}`);
-  //   } catch (e) {
-  //     console.error('Token metadata not found via Metaplex:', e.message);
-  //   }
-  // }
-
-  // getTokenInfo('DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh')
-
-  // async function fetchTokenMetadata() {
-  //   try {
-  //     const metadataPda = findMetadataPda(mint);
-  //     const metadata = await Metadata.fromAccountAddress(solanaConnection, metadataPda);
-  
-  //     console.log('Name:', metadata.data.name.trim());
-  //     console.log('Symbol:', metadata.data.symbol.trim());
-  //     console.log('URI:', metadata.data.uri.trim());
-  //   } catch (error) {
-  //     console.error('Failed to fetch token metadata:', error);
-  //   }
-  // }
-  
-  // fetchTokenMetadata();
-
-  // async function getMetadata() {
-  //   try {
-  //     const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
-  //     console.log('Name:', nft.name);
-  //     console.log('Symbol:', nft.symbol);
-  //     console.log('URI:', nft.uri); // points to metadata JSON
-  //   } catch (e) {
-  //     console.error('Error fetching metadata:', e);
-  //   }
-  // }
-  // getMetadata();
-  // async function getFungibleTokenMetadata() {
-  //   try {
-  //     const metadataPDA = await Metadata.getPDA(mint);
-  //     const metadataAccount = await Metadata.load(solanaConnection, metadataPDA);
-  //     const { data } = metadataAccount.data;
-  
-  //     console.log('Name:', data.name);
-  //     console.log('Symbol:', data.symbol);
-  //     console.log('URI:', data.uri); // can contain logo, decimals, etc.
-  //   } catch (e) {
-  //     console.error('Metadata not found:', e);
-  //   }
-  // }
-  // getFungibleTokenMetadata();
-  // const TOKEN_MINT_ADDRESS = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
   async function getTokenSymbol(mintAddress: string): Promise<void> {
     const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
     const tokenMintAddress = new PublicKey(mintAddress);
@@ -417,7 +291,6 @@ export default function GameHud({
       console.log('Token metadata not found in the token list.');
     }
   }
-  // getTokenSymbol(mintAddress)
 
   async function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -705,7 +578,6 @@ async function connectSolana() {
     }
   }
 
-
   const handleFullscreenClick = () => {
     if (document.fullscreenElement) {
       document.exitFullscreen()
@@ -713,39 +585,7 @@ async function connectSolana() {
       document.documentElement.requestFullscreen()
     }
   }
-
-  // Filter messages based on type and target
-  const getFilteredMessages = () => {
-    if (!messageComponents || messageComponents.length === 0) return []
-
-    return messageComponents.filter((message) => {
-      const messageType = message.messageType
-      const targetPlayerIds = message.targetPlayerIds || []
-      // Show global chat messages
-      if (messageType === SerializedMessageType.GLOBAL_CHAT) return true
-
-      // Show targeted chat messages if player is in target list
-      if (
-        messageType === SerializedMessageType.TARGETED_CHAT &&
-        gameInstance?.currentPlayerEntityId
-      ) {
-        return targetPlayerIds.includes(gameInstance?.currentPlayerEntityId)
-      }
-
-      // Don't show notifications in chat
-      if (
-        messageType === SerializedMessageType.GLOBAL_NOTIFICATION ||
-        messageType === SerializedMessageType.TARGETED_NOTIFICATION
-      ) {
-        return false
-      }
-
-      return true
-    })
-  }
-
-  // Add CSS for animations
-
+  
   return (
     <div
       id="hud"
