@@ -35,6 +35,33 @@ export default function GameHud({
 }: GameHudProps) {
   const [addresses, setAddresses] = useState<string[]>([]);
   const [wallet, setWallet] = useState<{[address: string]: Array<{mint: string, balance: number}>}>({});
+  const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
+  const walletDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (walletDropdownRef.current && !walletDropdownRef.current.contains(event.target as Node)) {
+        setWalletDropdownOpen(false);
+      }
+    }
+    if (walletDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [walletDropdownOpen]);
+
+  function disconnectWallet(addressToRemove: string) {
+    setAddresses(prev => prev.filter(addr => addr !== addressToRemove));
+    // Optionally, also remove from wallet state
+    setWallet(prev => {
+      const newWallet = { ...prev };
+      delete newWallet[addressToRemove];
+      return newWallet;
+    });
+  }
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const refContainer = useRef<HTMLDivElement>(null)
   const [notifications, setNotifications] = useState<
@@ -339,14 +366,22 @@ async function findCoinGeckoId(symbol: string): Promise<number | null> {
     console.log(wallet);
     
     let newWallet = { ...wallet };
+    let totalTokens = 0;
     for (const address of addresses) {
       let tokenAccounts = await getTokenAccounts(address, solanaConnection);
       newWallet[address] = tokenAccounts;
+      totalTokens += tokenAccounts.length;
     }
     console.log("newWallet");
     console.log(newWallet);
     setWallet(newWallet);
     console.log(newWallet);
+    // Show notification/toast to player
+    const notifId = Date.now();
+    setNotifications([{ id: notifId, content: `${totalTokens} token${totalTokens !== 1 ? 's' : ''} in your wallet!`, author: "Your Wallet", timestamp: notifId }]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    }, 5000);
   }
 }
 
@@ -404,58 +439,68 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
   }
 }
 
-  async function connectSolana() {
-    let address= '';
-    let newAddresses = [...addresses];
-    if (window.phantom) {
-        console.log("Le wallet phantom est installé.");
-        try {
-            const response = await window.phantom.solana.connect({ onlyIfTrusted: false });
-            console.log("Connected to wallet:", response.publicKey.toString());
-            address = response.publicKey.toString();
-            if (!newAddresses.includes(address)) {
-              newAddresses.push(address);
-            }
-        } catch (error) {
-          console.error("Not connected :", error);
-        }
+async function connectSolana() {
+  let address = '';
+  let response;
+
+  // Try Phantom
+  if (window.phantom) {
+    try {
+      response = await window.phantom.solana.connect({ onlyIfTrusted: false });
+      address = response.publicKey.toString();
+    } catch (error) {
+      console.error("Not connected :", error);
+      return;
     }
-    if (window.solflare) {
-        console.log("Le wallet Solflare est installé.");
-        try {
-            let isConnected = await window.solflare.connect();
-            if (isConnected){
-                response = window.solflare;
-                console.log("Connected to wallet:", response.publicKey.toString());
-                if (!newAddresses.includes(address)) {
-                  newAddresses.push(address);
-                }
-            }
-        } catch (error) {
-          console.error("Not connected :", error);
-        }
+  } else if (window.solflare) {
+    try {
+      const isConnected = await window.solflare.connect();
+      if (isConnected && window.solflare.publicKey) {
+        address = window.solflare.publicKey.toString();
+      } else {
+        return;
+      }
+    } catch (error) {
+      console.error("Not connected :", error);
+      return;
     }
-    if (window.backpack) {
-        console.log("Le wallet backpack est installé.");
-        try {
-            const response = await window.backpack.connect();
-            address = response.publicKey.toString();
-            console.log("Connected to wallet:", address);
-            if (!addresses.includes(address)) {
-              addresses.push(address);
-            }
-        } catch (error) {
-          console.error("Not connected :", error);
-        }
+  } else if (window.backpack) {
+    try {
+      response = await window.backpack.connect();
+      address = response.publicKey.toString();
+    } catch (error) {
+      console.error("Not connected :", error);
+      return;
     }
-    setAddresses(newAddresses);
-    console.log(newAddresses)
-    return newAddresses;
+  } else {
+    // No wallet provider found
+    const notifId = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id: notifId, content: 'No supported wallet provider found', author: 'System', timestamp: notifId },
+    ]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    }, 5000);
+    return;
   }
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [messageComponents])
+  if (!address) return;
+  if (addresses.includes(address)) {
+    const notifId = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id: notifId, content: 'Wallet already register', author: 'System', timestamp: notifId },
+    ]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    }, 5000);
+    return;
+  }
+  setAddresses(prev => [...prev, address]);
+  console.log([...addresses, address]);
+  return [...addresses, address];
+}
 
   // Handle notifications from chat messages
   useEffect(() => {
@@ -604,6 +649,47 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
       className="fixed inset-0 bg-gray-800 bg-opacity-0 text-white p-4 z-50 pointer-events-none"
       ref={refContainer}
     >
+      {/* Wallet Count Badge & Dropdown */}
+      <div className="fixed top-4 right-4 z-50 pointer-events-auto" ref={walletDropdownRef}>
+        <div
+          className="bg-blue-600 text-white rounded-full px-4 py-2 shadow-lg text-sm font-semibold flex items-center gap-2 cursor-pointer select-none"
+          onClick={() => setWalletDropdownOpen(v => !v)}
+        >
+          <span className="inline-block w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+          {addresses.length} wallet{addresses.length !== 1 ? 's' : ''} connected
+        </div>
+        {walletDropdownOpen && (
+          <div className="absolute right-0 mt-2 w-72 bg-white text-gray-900 rounded-lg shadow-2xl border border-gray-200 py-2 animate-fade-in z-50">
+            <div className="px-4 py-2 font-semibold border-b border-gray-100 text-sm">Connected Wallets</div>
+            {addresses.length === 0 ? (
+              <div className="flex flex-col items-center px-4 py-3">
+                <div className="text-gray-500 text-sm mb-2">No wallets connected</div>
+              </div>
+            ) : (
+              addresses.map(addr => (
+                <div key={addr} className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 text-xs break-all">
+                  <span className="truncate max-w-[140px]">{addr}</span>
+                  <button
+                    className="ml-3 text-red-600 hover:text-red-800 font-semibold px-2 py-1 rounded transition-colors text-xs border border-red-200 hover:bg-red-50"
+                    onClick={e => { e.stopPropagation(); disconnectWallet(addr); }}
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ))
+            )}
+            {/* Always show add wallet button at the bottom */}
+            <div className="flex flex-col items-center px-4 py-3 border-t border-gray-200 mt-2">
+              <button
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded shadow transition-colors text-sm w-full"
+                onClick={e => { e.stopPropagation(); connectSolana && connectSolana(); }}
+              >
+                Connect your wallet
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       {/* Global Notifications */}
       <div className="fixed top-24 left-1/2 transform -translate-x-1/2 flex flex-col items-center space-y-2 pointer-events-none">
         {notifications.map((notification) => (
