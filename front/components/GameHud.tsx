@@ -64,7 +64,7 @@ export default function GameHud({
       // Implement rate limiting for CoinGecko API
       const now = Date.now();
       const timeSinceLastCall = now - lastCoinGeckoCall;
-      const minimumInterval = 6100; // At least 6.1 seconds between calls (CoinGecko free tier limit is ~10 calls per minute)
+      const minimumInterval = 6500; // At least 6.1 seconds between calls (CoinGecko free tier limit is ~10 calls per minute)
       
       // If we need to wait before making another call
       if (timeSinceLastCall < minimumInterval) {
@@ -295,7 +295,8 @@ export default function GameHud({
       }
       
       newPrices[token.mint] = price;
-      
+      console.log("Updated token prices:", newPrices);
+      console.log("Updated wallet state:", wallet);      
       // Update the token in the wallet with its price and symbol
       const tokenIndex = wallet[address].findIndex(t => t.mint === token.mint);
       if (tokenIndex !== -1) {
@@ -395,6 +396,44 @@ export default function GameHud({
       setTimeout(() => {
         setNotifications((prev) => prev.filter((n) => n.id !== notifId));
       }, 5000);
+      
+      // Save wallet data to file in public/wallets/ directory
+      try {
+        // Create a clean version of the wallet data to save (avoid circular references)
+        const walletData = {
+          address,
+          fetchedAt: new Date().toISOString(),
+          totalTokens,
+          tokens: tokens.map(token => ({
+            mint: token.mint,
+            balance: token.balance,
+            name: token.name,
+            symbol: token.symbol,
+            logo: token.logo,
+            tokenIsNFT: token.tokenIsNFT
+          }))
+        };
+        
+        // Use the API route to save the file on the server
+        const response = await fetch('/api/save-wallet', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            address,
+            walletData
+          }),
+        });
+        
+        if (response.ok) {
+          console.log(`Wallet data saved for ${address}`);
+        } else {
+          console.error(`Failed to save wallet data: ${response.statusText}`);
+        }
+      } catch (fileError) {
+        console.error("Error saving wallet data to file:", fileError);
+      }
     } finally {
       setLoadingPortfolio(prev => ({ ...prev, [address]: false }));
     }
