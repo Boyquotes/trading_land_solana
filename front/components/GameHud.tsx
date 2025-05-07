@@ -295,18 +295,20 @@ export default function GameHud({
       }
       
       newPrices[token.mint] = price;
-      console.log("Updated token prices:", newPrices);
-      console.log("Updated wallet state:", wallet);      
+      
       // Update the token in the wallet with its price and symbol
       const tokenIndex = wallet[address].findIndex(t => t.mint === token.mint);
       if (tokenIndex !== -1) {
         setWallet(prev => {
           const newWallet = { ...prev };
+          // Calculate valueStableCoin (balance * price)
+          const valueStableCoin = price !== null ? token.balance * price : null;
           const updatedToken = { 
             ...newWallet[address][tokenIndex], 
             price, 
             symbol,
-            priceSource // Store the source of the price data
+            priceSource, // Store the source of the price data
+            valueStableCoin // Add the calculated value in USD
           };
           newWallet[address] = [
             ...newWallet[address].slice(0, tokenIndex),
@@ -320,6 +322,32 @@ export default function GameHud({
       await sleep(1000); // 1s delay between requests to avoid rate limiting
     }
     
+    // Merge newPrices into wallet for entries with matching address keys
+    setWallet(prev => {
+      const updatedWallet = { ...prev };
+      
+      // If this address exists in the wallet
+      if (updatedWallet[address]) {
+        // Update each token with its new price data and calculate valueStableCoin
+        updatedWallet[address] = updatedWallet[address].map(token => {
+          if (token.mint in newPrices) {
+            const price = newPrices[token.mint];
+            // Calculate valueStableCoin (balance * price)
+            const valueStableCoin = price !== null ? token.balance * price : null;
+            return {
+              ...token,
+              price,
+              valueStableCoin
+            };
+          }
+          return token;
+        });
+      }
+      console.log("Updated wallet:", updatedWallet);
+      return updatedWallet;
+    });
+    
+    // Store the prices in the tokenPrices state as well (for backward compatibility)
     setTokenPrices(prev => ({ ...prev, ...newPrices }));
     
     // Count non-NFT tokens with prices for the notification
@@ -369,15 +397,18 @@ export default function GameHud({
         TOKEN_PROGRAM_ID,
         { filters: filters }
       );
-      const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean }> = [];
+      const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean; valueStableCoin?: number | null }> = [];
       for (const [i, account] of accounts.entries()) {
         const parsedAccountInfo: any = account.account.data;
         const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
         const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
         const decimals: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["decimals"];
         const metadata = await getTokenMetadata(mintAddress);
+        console.log(metadata)
+        console.log(metadata?.symbol)
         const tokenIsNFT = decimals === 0 && tokenBalance === 1;
-        tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT });
+        // Initialize valueStableCoin as null - will be populated when prices are available
+        tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT, valueStableCoin: null });
         setLiveTokenCount(prev => ({ ...prev, [address]: i + 1 }));
         // Wait 550ms before next call
         if (i < accounts.length - 1) {
@@ -410,7 +441,8 @@ export default function GameHud({
             name: token.name,
             symbol: token.symbol,
             logo: token.logo,
-            tokenIsNFT: token.tokenIsNFT
+            tokenIsNFT: token.tokenIsNFT,
+            valueStableCoin: token.valueStableCoin
           }))
         };
         
@@ -789,7 +821,7 @@ async function checkPricePortfolio(wallet: { [address: string]: Array<{ mint: st
         // Skip NFTs - don't attempt to fetch price for NFTs
         if (token.tokenIsNFT) {
           console.log(`Skipping price fetch for NFT: ${token.name || token.mint}`);
-          return { ...token, price: null, priceSource: "N/A - NFT" };
+          return { ...token, price: null, priceSource: "N/A - NFT", valueStableCoin: null };
         }
 
         const symbol = token.symbol || await getTokenSymbolReturnSymbol(token.mint);
@@ -797,7 +829,7 @@ async function checkPricePortfolio(wallet: { [address: string]: Array<{ mint: st
         // Skip tokens with null symbol - can't fetch price without a symbol
         if (symbol === null) {
           console.log(`Skipping price fetch for token with null symbol: ${token.name || token.mint}`);
-          return { ...token, price: null, priceSource: "N/A - No Symbol" };
+          return { ...token, price: null, priceSource: "N/A - No Symbol", valueStableCoin: null };
         }
 
         let price = null;
@@ -829,7 +861,10 @@ async function checkPricePortfolio(wallet: { [address: string]: Array<{ mint: st
           }
         }
 
-        return { ...token, symbol, price, priceSource };
+        // Calculate valueStableCoin (balance * price) if we have a price
+        const valueStableCoin = price !== null ? token.balance * price : null;
+
+        return { ...token, symbol, price, priceSource, valueStableCoin };
       })
     );
 
