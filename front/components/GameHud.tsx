@@ -9,6 +9,7 @@ import { Maximize } from 'lucide-react'
 import { MicroGameCard } from './GameCard'
 import { GameInfo } from '@/types'
 import gameData from '../public/gameData.json'
+import { VehicleSystem } from '../game/ecs/system/VehicleSystem.js'
 import { createSolanaClient, GetTokenAccountBalanceApi } from "gill";
 import { address } from "@solana/kit";
 import { Connection, GetProgramAccountsFilter, PublicKey, clusterApiUrl, ParsedAccountData } from "@solana/web3.js";
@@ -45,6 +46,25 @@ export default function GameHud({
 }: GameHudProps) {
   // ...existing code...
 
+  const [entities, setEntities] = useState<any[]>([]); // Store ECS entities
+  const vehicleSystem = new VehicleSystem();
+
+  // Helper to add a vehicle entity
+  function addWoodCubeEntity() {
+    // Send a SPAWN_CUBE message to the server via websocket
+    const spawnCubeMessage = {
+      t: 5, // ClientMessageType.SPAWN_CUBE
+      position: { x: 0, y: 10, z: 0 },
+      size: { width: 3, height: 3, depth: 3 },
+      color: '#deb887', // Wood color, optional
+    };
+    if (gameInstance?.websocketManager) {
+      gameInstance.websocketManager.send(spawnCubeMessage);
+      console.log('[WoodCubeDebug] Sent SPAWN_CUBE message to server', spawnCubeMessage);
+    } else {
+      console.warn('[WoodCubeDebug] gameInstance.websocketManager not found');
+    }
+  }
   // Loading state for each address
   const [loadingPortfolio, setLoadingPortfolio] = useState<{[address: string]: boolean}>({});
   // Track live token count per address
@@ -410,15 +430,28 @@ export default function GameHud({
         // Initialize valueStableCoin as null - will be populated when prices are available
         tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT, valueStableCoin: null });
         setLiveTokenCount(prev => ({ ...prev, [address]: i + 1 }));
+
+        // --- SPAWN A CUBE FOR THIS TOKEN ---
+        if (gameInstance?.websocketManager) {
+          const spawnCubeMessage = {
+            t: 5, // ClientMessageType.SPAWN_CUBE
+            position: { x: i * 5, y: 10, z: 0 }, // Spread cubes along x axis
+            size: { width: 2, height: 2, depth: 2 },
+            color: '#deb887', // Wood color, or use token symbol for variety
+          };
+          gameInstance.websocketManager.send(spawnCubeMessage);
+          console.log('[WalletCube] Sent SPAWN_CUBE for token', mintAddress, spawnCubeMessage);
+        }
+        // --- END SPAWN CUBE ---
+
         // Wait 550ms before next call
         if (i < accounts.length - 1) {
           await new Promise(res => setTimeout(res, 550));
         }
       }
-      newWallet[address] = tokens;
       totalTokens = tokens.length;
+      newWallet[address] = tokens;
       setWallet(newWallet);
-      console.log(tokenAccounts);
       console.log(totalTokens);
       console.log(newWallet);
       // Show notification/toast to player
@@ -914,6 +947,8 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
 }
 
 async function connectSolana() {
+  // ...existing code...
+
   let address = '';
   let response;
   console.log("window");
@@ -985,6 +1020,8 @@ async function connectSolana() {
   }
   setAddresses(prev => [...prev, address]);
   console.log([...addresses, address]);
+  // Add a wood cube to the game when wallet connects
+  addWoodCubeEntity();
   return [...addresses, address];
 }
 

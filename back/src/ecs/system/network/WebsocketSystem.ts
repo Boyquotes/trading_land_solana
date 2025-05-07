@@ -19,7 +19,10 @@ import {
   SetPlayerNameMessage,
   ClientMessageType,
   ClientMessage,
+  SpawnCubeMessage,
 } from '../../../../../shared/network/client/index.js'
+import { handleSpawnCubeMessage } from './handleSpawnCubeMessage.js'
+
 import {
   ConnectionMessage,
   SerializedMessageType,
@@ -187,6 +190,10 @@ export class WebsocketSystem {
     this.addMessageHandler(
       ClientMessageType.SET_PLAYER_NAME,
       this.handleSetPlayerNameMessage.bind(this)
+    )
+    this.addMessageHandler(
+      ClientMessageType.SPAWN_CUBE,
+      (ws: any, message: SpawnCubeMessage) => handleSpawnCubeMessage(ws, message)
     )
   }
 
