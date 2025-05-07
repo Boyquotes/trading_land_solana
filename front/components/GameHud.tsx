@@ -22,6 +22,16 @@ import {
 } from '@metaplex-foundation/mpl-token-metadata';;
 import axios from 'axios';
 
+// Extend the Window interface to include wallet providers
+declare global {
+  interface Window {
+    phantom?: any;
+    solflare?: any;
+    backpack?: any;
+  }
+}
+
+
 export interface GameHudProps {
   messages: MessageComponent[]
   sendMessage: (message: string) => void
@@ -33,6 +43,87 @@ export default function GameHud({
   sendMessage,
   gameInstance,
 }: GameHudProps) {
+  // Wallet detection and state
+  const [detectedWallets, setDetectedWallets] = useState<Array<{id: string, name: string, logo: string}>>([]);
+
+  useEffect(() => {
+    const wallets = [];
+    if (typeof window !== 'undefined') {
+      if (window.phantom && window.phantom.solana) {
+        wallets.push({ id: 'phantom', name: 'Phantom', logo: '/wallet-phantom.png' });
+      }
+      if (window.solflare) {
+        wallets.push({ id: 'solflare', name: 'Solflare', logo: '/wallet-solflare.png' });
+      }
+      if (window.backpack) {
+        wallets.push({ id: 'backpack', name: 'Backpack', logo: '/wallet-backpack.png' });
+      }
+    }
+    setDetectedWallets(wallets);
+  }, []);
+
+  // Handler for wallet connect button
+  async function handleWalletConnect(walletId: string) {
+    let address = '';
+    let response;
+    try {
+      if (walletId === 'phantom' && window.phantom && window.phantom.solana) {
+        response = await window.phantom.solana.connect({ onlyIfTrusted: false });
+        address = response.publicKey.toString();
+      } else if (walletId === 'solflare' && window.solflare) {
+        const isConnected = await window.solflare.connect();
+        if (isConnected && window.solflare.publicKey) {
+          address = window.solflare.publicKey.toString();
+        } else {
+          return;
+        }
+      } else if (walletId === 'backpack' && window.backpack) {
+        response = await window.backpack.connect();
+        address = response.publicKey.toString();
+      } else {
+        // No wallet provider found
+        const notifId = Date.now();
+        setNotifications((prev) => [
+          ...prev,
+          { id: notifId, content: 'No supported wallet provider found', author: 'System', timestamp: notifId },
+        ]);
+        setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+        }, 5000);
+        return;
+      }
+    } catch (error) {
+      console.error('Not connected :', error);
+      return;
+    }
+
+    if (!address) return;
+    if (addresses.includes(address)) {
+      const notifId = Date.now();
+      setNotifications((prev) => [
+        ...prev,
+        { id: notifId, content: 'Wallet already register', author: 'System', timestamp: notifId },
+      ]);
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+      }, 5000);
+      return;
+    }
+    if (addresses.length >= 3) {
+      const notifId = Date.now();
+      setNotifications((prev) => [
+        ...prev,
+        { id: notifId, content: 'You can only register 3 wallets. Disconnect one wallet before add a new.', author: 'System', timestamp: notifId },
+      ]);
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+      }, 5000);
+      return;
+    }
+    setAddresses(prev => [...prev, address]);
+    console.log([...addresses, address]);
+    return [...addresses, address];
+  }
   const [addresses, setAddresses] = useState<string[]>([]);
   const [wallet, setWallet] = useState<{[address: string]: Array<{mint: string, balance: number}>}>({});
   const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
@@ -442,7 +533,8 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
 async function connectSolana() {
   let address = '';
   let response;
-
+  console.log("window");
+  console.log(window);
   // Try Phantom
   if (window.phantom) {
     try {
@@ -491,6 +583,17 @@ async function connectSolana() {
     setNotifications((prev) => [
       ...prev,
       { id: notifId, content: 'Wallet already register', author: 'System', timestamp: notifId },
+    ]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    }, 5000);
+    return;
+  }
+  if (addresses.length >= 3) {
+    const notifId = Date.now();
+    setNotifications((prev) => [
+      ...prev,
+      { id: notifId, content: 'You can only register 3 wallets. Disconnect one wallet before add a new.', author: 'System', timestamp: notifId },
     ]);
     setTimeout(() => {
       setNotifications((prev) => prev.filter((n) => n.id !== notifId));
@@ -680,12 +783,29 @@ async function connectSolana() {
             )}
             {/* Always show add wallet button at the bottom */}
             <div className="flex flex-col items-center px-4 py-3 border-t border-gray-200 mt-2">
-              <button
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded shadow transition-colors text-sm w-full"
-                onClick={e => { e.stopPropagation(); connectSolana && connectSolana(); }}
-              >
-                Connect your wallet
-              </button>
+              {/* Render a button for each detected wallet provider */}
+              {detectedWallets.length === 0 ? (
+                <button
+                  className="bg-gray-400 text-white font-semibold px-4 py-2 rounded shadow text-sm w-full cursor-not-allowed"
+                  disabled
+                >
+                  No supported wallet provider found
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2 w-full">
+                  {detectedWallets.map((wallet) => (
+                    <button
+                      key={wallet.id}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded shadow transition-colors text-sm w-full"
+                      onClick={e => { e.stopPropagation(); handleWalletConnect(wallet.id); }}
+                    >
+                      <img src={wallet.logo} alt={wallet.name + ' logo'} className="w-6 h-6" />
+                      Connect with {wallet.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
             </div>
           </div>
         )}
@@ -767,64 +887,6 @@ async function connectSolana() {
               <span className="font-medium">Check Metadata</span>
           </div>
         </div>
-      </div>
-
-      <div className="absolute bottom-4 right-4 bg-black bg-opacity-20 rounded-xl p-4 z-50 hidden lg:flex flex-col w-[360px] pointer-events-auto space-y-2">
-        {/* Other games cards mini section */}
-        <div className="grid grid-cols-4 gap-3">
-          {gameData.slice(0, 4).map((game: GameInfo) => (
-            <MicroGameCard
-              key={game.slug}
-              title={game.title}
-              imageUrl={game.imageUrl}
-              slug={game.slug}
-            />
-          ))}
-        </div>
-
-        <div className="overflow-y-auto max-h-64 h-64 space-y-2 pr-2">
-          {getFilteredMessages().map((messageComponent, index) => {
-            return (
-              <div
-                key={index}
-                ref={index === getFilteredMessages().length - 1 ? messagesEndRef : null}
-              >
-                <div
-                  className={`rounded-lg p-2 ${
-                    messageComponent.messageType === SerializedMessageType.TARGETED_CHAT
-                      ? 'bg-gray-900 bg-opacity-40 p-2'
-                      : 'bg-gray-700 bg-opacity-30'
-                  }`}
-                >
-                  <p className="text-sm break-words">
-                    <span
-                      className={`font-medium ${
-                        messageComponent.messageType === SerializedMessageType.TARGETED_CHAT
-                          ? 'text-gray-1000'
-                          : ''
-                      }`}
-                    >
-                      {messageComponent.author}
-                    </span>
-                    : {messageComponent.content}
-                  </p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <input
-          type="text"
-          placeholder="Type your message..."
-          className="p-2 bg-gray-700 bg-opacity-30 text-white rounded-lg"
-          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === 'Enter') {
-              sendMessage(e.currentTarget.value)
-              e.currentTarget.value = ''
-              e.currentTarget.blur() // Remove focus from the input
-            }
-          }}
-        />
       </div>
 
       <div className="flex lg:hidden pointer-events-auto">
