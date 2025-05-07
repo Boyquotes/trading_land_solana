@@ -46,10 +46,7 @@ export default function GameHud({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-
-  console.log("here")
   async function callSol() {
-    console.log("here2")
     const { rpc } = createSolanaClient({ urlOrMoniker: "devnet" });
     
     // get slot
@@ -74,9 +71,8 @@ export default function GameHud({
     // }
 
   }
-  callSol()
-  console.log("process.env.NEXT_PUBLIC_RPC_URL")
-  console.log(process.env.NEXT_PUBLIC_RPC_URL)
+  // callSol()
+
   const rpcEndpoint = process.env.NEXT_PUBLIC_RPC_URL;
   const solanaConnection = new Connection(rpcEndpoint);
   
@@ -138,8 +134,6 @@ export default function GameHud({
     return tokens;
 }
   // getTokenAccounts(walletToQuery,solanaConnection);
-
-
 
   // const NEXT_PUBLIC_SOLSCAN_API_KEY = 'YOUR_API_KEY';
   const mintAddress = 'DFL1zNkaGPWm1BqAVqRjCZvHmwTFrEaJtbzJWgseoNJh';
