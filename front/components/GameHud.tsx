@@ -437,7 +437,8 @@ export default function GameHud({
             t: 5, // ClientMessageType.SPAWN_CUBE
             position: { x: i * 5, y: 10, z: 0 }, // Spread cubes along x axis
             size: { width: 2, height: 2, depth: 2 },
-            color: '#deb887', // Wood color, or use token symbol for variety
+            color: '#deb887', // Wood color fallback
+            textureUrl: metadata?.logo || undefined, // Use token logo as texture if available
           };
           gameInstance.websocketManager.send(spawnCubeMessage);
           console.log('[WalletCube] Sent SPAWN_CUBE for token', mintAddress, spawnCubeMessage);

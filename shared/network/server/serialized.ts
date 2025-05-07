@@ -23,6 +23,7 @@ export enum SerializedComponentType {
   COMPONENT_REMOVED_EVENT = 16,
   WHEEL = 17,
   INVISIBLE = 18,
+  TEXTURE = 19,
 }
 
 export enum SerializedEntityType {

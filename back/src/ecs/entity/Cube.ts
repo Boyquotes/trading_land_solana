@@ -20,6 +20,7 @@ import {
   ColliderPropertiesComponentData,
 } from '../component/physics/ColliderPropertiesComponent.js'
 import { TextComponent } from '../../../../shared/component/TextComponent.js'
+import { TextureComponent } from '../component/TextureComponent.js'
 
 export interface CubeParams {
   position: {
@@ -27,6 +28,10 @@ export interface CubeParams {
     y: number
     z: number
   }
+  /**
+   * Optional URL to an image texture to apply to all faces of the cube
+   */
+  textureUrl?: string
   /**
    * @default 1
    */
@@ -110,6 +115,11 @@ export class Cube {
       serverMeshComponent,
     ])
 
+    if (params.textureUrl) {
+      const textureComponent = new TextureComponent(this.entity.id, params.textureUrl)
+      this.entity.addComponent(textureComponent)
+      networkDataComponent.components.push(textureComponent)
+    }
     if (name) {
       const textComponent = new TextComponent(this.entity.id, name)
       this.entity.addComponent(textComponent)
