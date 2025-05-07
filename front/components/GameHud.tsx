@@ -21,6 +21,7 @@ import {
   findMetadataPda,
 } from '@metaplex-foundation/mpl-token-metadata';;
 import axios from 'axios';
+import { PythHttpClient, getPythClusterApiUrl } from "@pythnetwork/client";
 
 // Extend the Window interface to include wallet providers
 declare global {
@@ -42,6 +43,363 @@ export default function GameHud({
   sendMessage,
   gameInstance,
 }: GameHudProps) {
+  // ...existing code...
+
+  // Loading state for each address
+  const [loadingPortfolio, setLoadingPortfolio] = useState<{[address: string]: boolean}>({});
+  // Track live token count per address
+  const [liveTokenCount, setLiveTokenCount] = useState<{[address: string]: number}>({});
+
+  // Track token prices by mint address
+  const [tokenPrices, setTokenPrices] = useState<{[mint: string]: number | null}>({});
+  // Track price loading state per wallet
+  const [loadingPrice, setLoadingPrice] = useState<{[address: string]: boolean}>({});
+
+  // Track last CoinGecko API call time to implement rate limiting
+  const [lastCoinGeckoCall, setLastCoinGeckoCall] = useState<number>(0);
+
+  // Fetch price for a CoinGecko ID with rate limiting to avoid 429 Too Many Requests errors
+  async function fetchTokenPrice(coinGeckoId: string): Promise<number | null> {
+    try {
+      // Implement rate limiting for CoinGecko API
+      const now = Date.now();
+      const timeSinceLastCall = now - lastCoinGeckoCall;
+      const minimumInterval = 6100; // At least 6.1 seconds between calls (CoinGecko free tier limit is ~10 calls per minute)
+      
+      // If we need to wait before making another call
+      if (timeSinceLastCall < minimumInterval) {
+        const waitTime = minimumInterval - timeSinceLastCall;
+        console.log(`Rate limiting CoinGecko API - waiting ${waitTime}ms before next call`);
+        await sleep(waitTime);
+      }
+      
+      // Update the last call time
+      setLastCoinGeckoCall(Date.now());
+      
+      // Make the API call with error handling
+      console.log(`Fetching CoinGecko price for: ${coinGeckoId}`);
+      const res = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoId}&vs_currencies=usd`);
+      
+      if (res.status === 429) {
+        console.error("CoinGecko rate limit exceeded (429 error). Implementing longer delay.");
+        await sleep(10000); // 10 second cooldown if we hit the rate limit
+        return null;
+      }
+      
+      return res.data[coinGeckoId]?.usd ?? null;
+    } catch (error) {
+      // Check if error is specifically a rate limit error
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        console.error("CoinGecko rate limit exceeded (429 error). Need to wait longer between requests.");
+      } else {
+        console.error("Error fetching price from CoinGecko:", error);
+      }
+      return null;
+    }
+  }
+
+  // Helper function to get price from Jupiter API
+  async function getJupiterPrice(mintAddress: string): Promise<number | null> {
+    try {
+      // Type validation to ensure mintAddress is a string
+      if (!mintAddress || typeof mintAddress !== 'string') {
+        console.warn('Invalid mintAddress passed to getJupiterPrice:', mintAddress);
+        return null;
+      }
+
+      // Jupiter API endpoint for price data
+      const jupiterPriceEndpoint = `https://price.jup.ag/v4/price?ids=${mintAddress}`;
+      
+      // Make the API call with error handling
+      console.log(`Fetching Jupiter price for: ${mintAddress}`);
+      
+      // Use a timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      try {
+        const response = await axios.get(jupiterPriceEndpoint, {
+          signal: controller.signal,
+          validateStatus: (status) => {
+            // Consider any status code as successful to handle them manually
+            return true;
+          }
+        });
+        
+        // Clear the timeout since the request completed
+        clearTimeout(timeoutId);
+        
+        // Handle non-200 status codes
+        if (response.status !== 200) {
+          // Handle silently - just log the issue
+          console.warn(`Failed to fetch Jupiter price, status: ${response.status} for mint: ${mintAddress}`);
+          return null;
+        }
+        
+        // Extract price from Jupiter response
+        const priceData = response.data?.data?.[mintAddress];
+        if (priceData && typeof priceData.price === 'number') {
+          return priceData.price;
+        } else {
+          // Token exists in Jupiter but no price data available
+          console.warn(`Price information not found in Jupiter API for mintAddress: ${mintAddress}`);
+          return null;
+        }
+      } catch (innerError) {
+        // Clear the timeout to prevent memory leaks
+        clearTimeout(timeoutId);
+        
+        // Handle abort errors silently
+        if (innerError.name === 'AbortError') {
+          console.warn(`Jupiter API request timed out for mintAddress: ${mintAddress}`);
+          return null;
+        }
+        
+        // Handle other fetch errors silently
+        console.warn(`Error fetching from Jupiter API for mintAddress: ${mintAddress}`, innerError);
+        return null;
+      }
+    } catch (error) {
+      // Catch and handle any other unexpected errors silently
+      console.warn(`Failed to fetch price from Jupiter API for mintAddress: ${mintAddress}`, error);
+      return null;
+    }
+  }
+
+  // Helper function to get price from Binance API
+  async function getBinancePrice(symbol: string | null): Promise<number | null> {
+    try {
+      // Type validation to ensure symbol is a string
+      if (!symbol || typeof symbol !== 'string') {
+        console.warn('Invalid symbol passed to getBinancePrice:', symbol);
+        return null;
+      }
+
+      // Format the symbol for Binance API (append USDT and remove any spaces, make uppercase)
+      const formattedSymbol = `${symbol.replace(/\s+/g, '').toUpperCase()}USDT`;
+      
+      // First check if this market exists on Binance
+      try {
+        // Binance API endpoint for exchange info
+        const exchangeInfoEndpoint = 'https://api.binance.com/api/v3/exchangeInfo';
+        const exchangeInfoResponse = await axios.get(exchangeInfoEndpoint);
+        
+        if (exchangeInfoResponse.status !== 200) {
+          console.error(`Failed to fetch Binance exchange info, status: ${exchangeInfoResponse.status}`);
+          return null;
+        }
+        
+        // Check if the symbol exists in the available symbols
+        const symbolExists = exchangeInfoResponse.data.symbols.some(
+          (marketInfo: any) => marketInfo.symbol === formattedSymbol && marketInfo.status === 'TRADING'
+        );
+        
+        if (!symbolExists) {
+          console.warn(`Market ${formattedSymbol} does not exist on Binance or is not currently trading`);
+          return null;
+        }
+        
+        console.log(`Market ${formattedSymbol} exists on Binance, proceeding to fetch price`);
+      } catch (error) {
+        console.error('Error checking if market exists on Binance:', error);
+        // Continue with price fetch attempt even if market check fails
+      }
+      
+      // Binance API endpoint for price data
+      const binancePriceEndpoint = `https://api.binance.com/api/v3/ticker/price?symbol=${formattedSymbol}`;
+      
+      // Make the API call with error handling
+      console.log(`Fetching Binance price for: ${formattedSymbol}`);
+      const response = await axios.get(binancePriceEndpoint);
+      
+      if (response.status !== 200) {
+        console.error(`Failed to fetch Binance price, status: ${response.status}`);
+        return null;
+      }
+      
+      // Extract price from Binance response
+      if (response.data && typeof response.data.price === 'string') {
+        const price = parseFloat(response.data.price);
+        if (!isNaN(price)) {
+          return price;
+        }
+      }
+
+      console.warn(`Price information not found in Binance API for symbol: ${symbol}`);
+      return null;
+    } catch (error) {
+      // Check if error is specifically a Not Found error (symbol doesn't exist)
+      if (axios.isAxiosError(error) && error.response?.status === 400) {
+        console.warn(`Symbol ${symbol} not found on Binance API`);
+      } else {
+        console.error(`Failed to fetch price from Binance API for symbol: ${symbol}`, error);
+      }
+      return null;
+    }
+  }
+
+  // Refresh all token prices for a wallet
+  async function refreshTokenPrices(address: string) {
+    setLoadingPrice(prev => ({ ...prev, [address]: true }));
+    const tokens = wallet[address] || [];
+    const newPrices: {[mint: string]: number | null} = {};
+    
+    for (const token of tokens) {
+      console.log("Processing token:", token);
+      
+      // Skip NFTs - don't attempt to fetch price for NFTs
+      if (token.tokenIsNFT) {
+        console.log(`Skipping price fetch for NFT: ${token.name || token.mint}`);
+        newPrices[token.mint] = null;
+        continue;
+      }
+      
+      // Get token symbol if not already available
+      const symbol = token.symbol || await getTokenSymbolReturnSymbol(token.mint);
+
+      // Skip tokens with null symbol - can't fetch price without a symbol
+      if (symbol === null) {
+        console.log(`Skipping price fetch for token with null symbol: ${token.name || token.mint}`);
+        newPrices[token.mint] = null;
+        continue;
+      }
+      
+      let price = null;
+      let priceSource = "";
+      
+      // First try to get price from Binance using the token symbol
+      const binancePrice = await getBinancePrice(symbol);
+      if (binancePrice !== null) {
+        price = binancePrice;
+        priceSource = "Binance";
+        console.log(`${symbol.toUpperCase()} Price (USD) from Binance: $${price}`);
+      } else {
+        // Second, try CoinGecko if not available on Binance
+        const coinGeckoId = await findCoinGeckoId(symbol);
+        if (coinGeckoId) {
+          await sleep(500); // 500ms delay between requests to avoid rate limiting
+          price = await fetchTokenPrice(coinGeckoId);
+          priceSource = "CoinGecko";
+          console.log(`${symbol.toUpperCase()} Price (USD) from CoinGecko: $${price}`);
+        } else {
+          // Finally, fallback to Jupiter API if not available on Binance or CoinGecko
+          const jupiterPrice = await getJupiterPrice(token.mint);
+          if (jupiterPrice !== null) {
+            price = jupiterPrice;
+            priceSource = "Jupiter";
+            console.log(`${symbol.toUpperCase()} Price (USD) from Jupiter: $${price}`);
+          } else {
+            console.log(`No price found for ${symbol} on Binance, CoinGecko or Jupiter`);
+          }
+        }
+      }
+      
+      newPrices[token.mint] = price;
+      
+      // Update the token in the wallet with its price and symbol
+      const tokenIndex = wallet[address].findIndex(t => t.mint === token.mint);
+      if (tokenIndex !== -1) {
+        setWallet(prev => {
+          const newWallet = { ...prev };
+          const updatedToken = { 
+            ...newWallet[address][tokenIndex], 
+            price, 
+            symbol,
+            priceSource // Store the source of the price data
+          };
+          newWallet[address] = [
+            ...newWallet[address].slice(0, tokenIndex),
+            updatedToken,
+            ...newWallet[address].slice(tokenIndex + 1)
+          ];
+          return newWallet;
+        });
+      }
+      
+      await sleep(1000); // 1s delay between requests to avoid rate limiting
+    }
+    
+    setTokenPrices(prev => ({ ...prev, ...newPrices }));
+    
+    // Count non-NFT tokens with prices for the notification
+    const tokensWithPrice = Object.entries(newPrices)
+      .filter(([mint, price]) => {
+        const token = wallet[address].find(t => t.mint === mint);
+        return price !== null && !token?.tokenIsNFT;
+      }).length;
+    
+    if (tokensWithPrice > 0) {
+      const notifId = Date.now();
+      setNotifications([{ 
+        id: notifId, 
+        content: `Updated prices for ${tokensWithPrice} token${tokensWithPrice !== 1 ? 's' : ''}`, 
+        author: "Price Oracle", 
+        timestamp: notifId 
+      }]);
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+      }, 5000);
+    }
+    
+    setLoadingPrice(prev => ({ ...prev, [address]: false }));
+  }
+
+  // Check portfolio for a single address
+  async function checkPortfolioForAddress(address: string) {
+    setLoadingPortfolio(prev => ({ ...prev, [address]: true }));
+    setLiveTokenCount(prev => ({ ...prev, [address]: 0 }));
+    let newWallet = { ...wallet };
+    let tokenAccounts: any[] = [];
+    let totalTokens = 0;
+    try {
+      // Custom getTokenAccounts logic to update live count
+      const filters: any[] = [
+        {
+          dataSize: 165,
+        },
+        {
+          memcmp: {
+            offset: 32,
+            bytes: address,
+          },
+        },
+      ];
+      const accounts = await solanaConnection.getParsedProgramAccounts(
+        TOKEN_PROGRAM_ID,
+        { filters: filters }
+      );
+      const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean }> = [];
+      for (const [i, account] of accounts.entries()) {
+        const parsedAccountInfo: any = account.account.data;
+        const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
+        const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
+        const decimals: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["decimals"];
+        const metadata = await getTokenMetadata(mintAddress);
+        const tokenIsNFT = decimals === 0 && tokenBalance === 1;
+        tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT });
+        setLiveTokenCount(prev => ({ ...prev, [address]: i + 1 }));
+        // Wait 550ms before next call
+        if (i < accounts.length - 1) {
+          await new Promise(res => setTimeout(res, 550));
+        }
+      }
+      newWallet[address] = tokens;
+      totalTokens = tokens.length;
+      setWallet(newWallet);
+      console.log(tokenAccounts);
+      console.log(totalTokens);
+      console.log(newWallet);
+      // Show notification/toast to player
+      const notifId = Date.now();
+      setNotifications([{ id: notifId, content: `${totalTokens} token${totalTokens !== 1 ? 's' : ''} in this wallet!`, author: "Your Wallet", timestamp: notifId }]);
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+      }, 5000);
+    } finally {
+      setLoadingPortfolio(prev => ({ ...prev, [address]: false }));
+    }
+  }
+
   // Wallet detection and state
   const [detectedWallets, setDetectedWallets] = useState<Array<{id: string, name: string, logo: string}>>([]);
 
@@ -188,13 +546,13 @@ export default function GameHud({
     console.log(`Found ${accounts.length} token account(s) for wallet ${walletAddress}.`);
 
     // For each token account, get mint address and call getTokenMetadata
-    for (const account of accounts) {
-      const parsedAccountInfo: any = account.account.data;
-      const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
-      // Call getTokenMetadata and log the result
-      const metadata = await getTokenMetadata(mintAddress);
-      console.log('Token metadata:', metadata);
-    }
+    // for (const account of accounts) {
+    //   const parsedAccountInfo: any = account.account.data;
+    //   const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
+    //   // Call getTokenMetadata and log the result
+    //   const metadata = await getTokenMetadata(mintAddress);
+    //   console.log('Token metadata:', metadata);
+    // }
     // Build tokens array with metadata, with delay between calls
     const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean }> = [];
     for (const [i, account] of accounts.entries()) {
@@ -297,31 +655,51 @@ export default function GameHud({
   }
 
   // Refactored: returns price
-async function findCoinGeckoId(symbol: string): Promise<number | null> {
-  const url = 'https://api.coingecko.com/api/v3/coins/list';
-  try {
-    const res = await fetch(url);
-    const coins = await res.json();
-    const match = coins.find((coin: any) => coin.symbol.toLowerCase() === symbol.toLowerCase());
-    if (!match) {
-      console.log(`No CoinGecko ID found for symbol: ${symbol}`);
-      return null;
+// Memoized CoinGecko coins list
+const [coinGeckoCoins, setCoinGeckoCoins] = useState<any[] | null>(null);
+
+useEffect(() => {
+  async function fetchCoinGeckoCoins() {
+    try {
+      const url = 'https://api.coingecko.com/api/v3/coins/list';
+      const res = await fetch(url);
+      const coins = await res.json();
+      setCoinGeckoCoins(coins);
+    } catch (err) {
+      console.error('Failed to fetch CoinGecko coins list:', err);
+      setCoinGeckoCoins([]);
     }
-    console.log(`Found CoinGecko ID: ${match.id}`);
-    // Fetch price
-    const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${match.id}&vs_currencies=usd`);
-    const priceData = await priceRes.json();
-    const price = priceData[match.id]?.usd ?? null;
-    console.log(`${symbol.toUpperCase()} Price (USD):`, price);
-    await sleep(500);
-    return price;
-  } catch (err) {
-    console.error('Error:', err);
+  }
+  if (coinGeckoCoins === null) {
+    fetchCoinGeckoCoins();
+  }
+}, [coinGeckoCoins]);
+
+async function findCoinGeckoId(symbol: string | null | undefined): Promise<string | null> {
+  if (!coinGeckoCoins) {
+    // Not loaded yet
+    console.log('CoinGecko coins list not loaded yet');
     return null;
   }
-}
+  if (!symbol || typeof symbol !== 'string') {
+    // Invalid symbol
+    console.log('Invalid symbol passed to findCoinGeckoId:', symbol);
+    return null;
+  }
   
-  // findCoinGeckoId('DFL');
+  // Find the coin by matching the symbol (case-insensitive)
+  const match = coinGeckoCoins.find((coin: any) => coin.symbol && coin.symbol.toLowerCase() === symbol.toLowerCase());
+  
+  if (!match) {
+    console.log(`No CoinGecko ID found for symbol: ${symbol}`);
+    return null;
+  }
+  
+  // Return the 'id' field instead of the 'symbol' field
+  // The 'id' field is what the CoinGecko API expects (e.g., "bitcoin", "solana", etc.)
+  console.log(`Found CoinGecko ID for ${symbol}: ${match.id}`);
+  return match.id; // Return the ID, not the symbol
+}
 
   async function checkPortfolio() {
   if (addresses.length > 0) {
@@ -349,36 +727,94 @@ async function findCoinGeckoId(symbol: string): Promise<number | null> {
   }
 }
 
-async function checkPricePortfolio(wallet: any) {
+async function checkPricePortfolio(wallet: { [address: string]: Array<{ mint: string; balance: number; symbol?: string | null; price?: number | null; tokenIsNFT?: boolean }> }) {
   console.log("checkPricePortfolio");
   console.log(wallet);
+
   // If wallet is empty but addresses exist, auto-populate first
   if (Object.keys(wallet).length === 0 && addresses.length > 0) {
     console.log("Wallet empty, calling checkPortfolio first...");
     await checkPortfolio();
   }
+
   // Copy wallet to mutate
   let newWallet = { ...wallet };
+
   for (const address in wallet) {
     // Map over tokens to update price
     console.log("address");
     console.log(address);
-    const updatedTokens = await Promise.all(wallet[address].map(async (token: any) => {
-      const symbol = await getTokenSymbolReturnSymbol(token.mint);
-      let price = null;
-      if (symbol) {
-        price = await findCoinGeckoId(symbol);
-        await sleep(1000);
-        // Display in UI (for now, alert, but you can use a state for better UI)
-        if (price !== null) {
-          console.log(`${symbol.toUpperCase()} Price (USD): $${price}`);
+
+    const updatedTokens = await Promise.all(
+      wallet[address].map(async (token) => {
+        // Skip NFTs - don't attempt to fetch price for NFTs
+        if (token.tokenIsNFT) {
+          console.log(`Skipping price fetch for NFT: ${token.name || token.mint}`);
+          return { ...token, price: null, priceSource: "N/A - NFT" };
         }
-      }
-      return { ...token, symbol, price };
-    }));
+
+        const symbol = token.symbol || await getTokenSymbolReturnSymbol(token.mint);
+        
+        // Skip tokens with null symbol - can't fetch price without a symbol
+        if (symbol === null) {
+          console.log(`Skipping price fetch for token with null symbol: ${token.name || token.mint}`);
+          return { ...token, price: null, priceSource: "N/A - No Symbol" };
+        }
+
+        let price = null;
+        let priceSource = "";
+
+        // First try to get price from Binance using the token symbol
+        const binancePrice = await getBinancePrice(symbol);
+        if (binancePrice !== null) {
+          price = binancePrice;
+          priceSource = "Binance";
+          console.log(`${symbol.toUpperCase()} Price (USD) from Binance: $${price}`);
+        } else {
+          // Second, try CoinGecko if not available on Binance
+          const coinGeckoId = await findCoinGeckoId(symbol);
+          if (coinGeckoId) {
+            price = await fetchTokenPrice(coinGeckoId);
+            priceSource = "CoinGecko";
+            console.log(`${symbol.toUpperCase()} Price (USD) from CoinGecko: $${price}`);
+          } else {
+            // Finally, fallback to Jupiter API if not available on Binance or CoinGecko
+            const jupiterPrice = await getJupiterPrice(token.mint);
+            if (jupiterPrice !== null) {
+              price = jupiterPrice;
+              priceSource = "Jupiter";
+              console.log(`${symbol.toUpperCase()} Price (USD) from Jupiter: $${price}`);
+            } else {
+              console.log(`No price found for ${symbol} on Binance, CoinGecko or Jupiter`);
+            }
+          }
+        }
+
+        return { ...token, symbol, price, priceSource };
+      })
+    );
+
     newWallet[address] = updatedTokens;
   }
+
   setWallet(newWallet);
+  
+  // Count non-NFT tokens with prices for the notification
+  const totalTokens = Object.values(newWallet).reduce((count, tokens) => 
+    count + tokens.filter(token => token.price !== null && token.price !== undefined && !token.tokenIsNFT).length, 0);
+  
+  if (totalTokens > 0) {
+    const notifId = Date.now();
+    setNotifications([{ 
+      id: notifId, 
+      content: `Updated prices for ${totalTokens} token${totalTokens !== 1 ? 's' : ''}`, 
+      author: "Price Oracle", 
+      timestamp: notifId 
+    }]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    }, 5000);
+  }
 }
 
 // Helper: getTokenSymbol but returns the symbol string
@@ -557,10 +993,7 @@ async function connectSolana() {
     }
   
     // 2. Fallback: query Metaplex metadata (network request)
-    const metadataAccount = metaplex
-      .nfts()
-      .pdas()
-      .metadata({ mint: mintAddress });
+    const metadataAccount = metaplex.nfts().pdas().metadata({ mint: mintAddress });
   
     const metadataAccountInfo = await solanaConnection.getAccountInfo(metadataAccount);
   
@@ -585,7 +1018,7 @@ async function connectSolana() {
       document.documentElement.requestFullscreen()
     }
   }
-  
+
   return (
     <div
       id="hud"
@@ -610,14 +1043,50 @@ async function connectSolana() {
               </div>
             ) : (
               addresses.map(addr => (
-                <div key={addr} className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 text-xs break-all">
-                  <span className="truncate max-w-[140px]">{addr}</span>
+                <div key={addr} className="flex flex-col gap-1 px-4 py-2 hover:bg-gray-100 text-xs break-all">
+                  <div className="flex items-center justify-between">
+                    <span className="truncate max-w-[140px]">{addr}</span>
+                    <button
+                      className="ml-3 text-red-600 hover:text-red-800 font-semibold px-2 py-1 rounded transition-colors text-xs border border-red-200 hover:bg-red-50"
+                      onClick={e => { e.stopPropagation(); disconnectWallet(addr); }}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
                   <button
-                    className="ml-3 text-red-600 hover:text-red-800 font-semibold px-2 py-1 rounded transition-colors text-xs border border-red-200 hover:bg-red-50"
-                    onClick={e => { e.stopPropagation(); disconnectWallet(addr); }}
+                    className="mb-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1 rounded shadow transition-colors text-xs w-fit self-end disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={e => { e.stopPropagation(); refreshTokenPrices(addr); }}
+                    disabled={!!loadingPrice[addr] || !(wallet[addr] && wallet[addr].length)}
                   >
-                    Disconnect
+                    {loadingPrice[addr] ? (
+                      <span className="flex items-center gap-1">
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        Refreshing prices...
+                      </span>
+                    ) : (
+                      'Refresh tokens price'
+                    )}
                   </button>
+                  <button
+                    className="mt-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1 rounded shadow transition-colors text-xs w-fit self-end disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={e => { e.stopPropagation(); checkPortfolioForAddress(addr); }}
+                    disabled={!!loadingPortfolio[addr]}
+                  >
+                    Check Portfolio
+                  </button>
+                  {loadingPortfolio[addr] && (
+                    <div className="flex items-center gap-2 mt-1 self-end">
+                      <svg className="animate-spin h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                      </svg>
+                      <span className="text-xs text-green-700">Loading...</span>
+                      <span className="text-xs text-green-800 font-bold">{liveTokenCount[addr] ?? 0} Token{liveTokenCount[addr] === 1 ? '' : 's'} found</span>
+                    </div>
+                  )}
                 </div>
               ))
             )}
