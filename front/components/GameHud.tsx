@@ -82,6 +82,9 @@ export default function GameHud({
   
   const walletToQuery = 'GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S'; //example: vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg
   
+  // State: Map wallet address to tokens array
+  const [tokenAccountsByWallet, setTokenAccountsByWallet] = useState<{ [wallet: string]: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null }> }>({});
+
   async function getTokenAccounts(walletAddress: string, solanaConnection: Connection) {
     const filters: GetProgramAccountsFilter[] = [
       {
@@ -108,20 +111,23 @@ export default function GameHud({
       const metadata = await getTokenMetadata(mintAddress);
       console.log('Token metadata:', metadata);
     }
-    const tokens: Array<{ mint: string; balance: number }> = [];
+    // Build tokens array with metadata
+    const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null }> = [];
     for (const [i, account] of accounts.entries()) {
       // Parse the account data
       const parsedAccountInfo: any = account.account.data;
       const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
       const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
+      // Get token metadata
+      const metadata = await getTokenMetadata(mintAddress);
       // Log results
       console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
-      console.log(`--Token Mint: ${mintAddress}`);
-      console.log(`--Token Balance: ${tokenBalance}`);
-      // Fetch and log token symbol and logo
-      // await getTokenSymbol(mintAddress);
-      tokens.push({ mint: mintAddress, balance: tokenBalance });
+      tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata });
     }
+    // Store in state by wallet address
+    setTokenAccountsByWallet(prev => ({ ...prev, [walletAddress]: tokens }))
+    console.log("tokenAccountsByWallet")
+    
     return tokens;
 }
   // getTokenAccounts(walletToQuery,solanaConnection);
@@ -513,7 +519,7 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
     fetchTokenList();
   }, []);
 
-  async function getTokenMetadata(mintStrAddress: string): Promise<{ name: string | null, symbol: string | null, logo: string | null }> {
+  async function getTokenMetadata(mintStrAddress: string): Promise<{ name: string | null, symbol: string | null, logo: string | null, tokenIsNFT: boolean }> {
     const metaplex = Metaplex.make(solanaConnection);
   
     const mintAddress = new PublicKey(mintStrAddress);
@@ -521,6 +527,7 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
     let tokenName: string | null = null;
     let tokenSymbol: string | null = null;
     let tokenLogo: string | null = null;
+    let tokenIsNFT: boolean = false;
   
     const metadataAccount = metaplex
       .nfts()
@@ -531,10 +538,21 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
   
     if (metadataAccountInfo) {
       console.log("found")
+      console.log(metadataAccountInfo)
       const token = await metaplex.nfts().findByMint({ mintAddress: mintAddress });
+      console.log("token")
+      console.log(token)
       tokenName = token.name || null;
       tokenSymbol = token.symbol || null;
       tokenLogo = token.json?.image || null;
+      // Heuristic: check if this is an NFT
+      if (
+        token.standard === 'NonFungible' ||
+        token.json?.properties?.category === 'nft' ||
+        (token.mint && token.supply === 1 && token.decimals === 0)
+      ) {
+        tokenIsNFT = true;
+      }
     }
     else {
       console.log("not found")
@@ -545,9 +563,11 @@ async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string |
         tokenName = token.name || null;
         tokenSymbol = token.symbol || null;
         tokenLogo = token.logoURI || null;
+        // SPL-token-registry tokens are almost always fungible
+        tokenIsNFT = false;
       }
     }
-    return { name: tokenName, symbol: tokenSymbol, logo: tokenLogo };
+    return { name: tokenName, symbol: tokenSymbol, logo: tokenLogo, tokenIsNFT };
   }
 
 
