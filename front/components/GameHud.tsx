@@ -432,19 +432,40 @@ export default function GameHud({
         tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT, valueStableCoin: null });
         setLiveTokenCount(prev => ({ ...prev, [address]: i + 1 }));
 
-        // --- SPAWN A CUBE FOR THIS TOKEN ---
+        // --- SPAWN A COIN CUBE FOR THIS TOKEN ---
         if (gameInstance?.websocketManager) {
-          const spawnCubeMessage = {
-            t: 5, // ClientMessageType.SPAWN_CUBE
+          const spawnCubeCoinMessage = {
+            t: 6, // ClientMessageType.SPAWN_CUBE_COIN
             position: { x: i * 5, y: 10, z: 0 }, // Spread cubes along x axis
             size: { width: 2, height: 2, depth: 2 },
-            color: '#deb887', // Wood color fallback
+            color: '#00ff00', // Green color for coins
             textureUrl: metadata?.logo || undefined, // Use token logo as texture if available
+            symbol: metadata?.symbol || 'TOKEN',
+            mintAddress: mintAddress
           };
-          gameInstance.websocketManager.send(spawnCubeMessage);
-          console.log('[WalletCube] Sent SPAWN_CUBE for token', mintAddress, spawnCubeMessage);
+          
+          try {
+            gameInstance.websocketManager.send(spawnCubeCoinMessage);
+            console.log('[WalletCoin] Sent SPAWN_CUBE_COIN for token', metadata?.symbol, mintAddress);
+          } catch (error) {
+            console.error('[WalletCoin] Failed to send SPAWN_CUBE_COIN message:', error);
+            
+            // Fallback to regular cube if message fails
+            try {
+              const fallbackMessage = {
+                t: 5, // ClientMessageType.SPAWN_CUBE
+                position: { x: i * 5, y: 10, z: 0 },
+                size: { width: 2, height: 2, depth: 2 },
+                color: '#deb887', // Wood color fallback
+              };
+              gameInstance.websocketManager.send(fallbackMessage);
+              console.log('[WalletCoin] Sent fallback SPAWN_CUBE message');
+            } catch (fallbackError) {
+              console.error('[WalletCoin] Even fallback message failed:', fallbackError);
+            }
+          }
         }
-        // --- END SPAWN CUBE ---
+        // --- END SPAWN COIN CUBE ---
 
         // Wait 550ms before next call
         if (i < accounts.length - 1) {

@@ -20,8 +20,10 @@ import {
   ClientMessageType,
   ClientMessage,
   SpawnCubeMessage,
+  SpawnCubeCoinMessage,
 } from '../../../../../shared/network/client/index.js'
 import { handleSpawnCubeMessage } from './handleSpawnCubeMessage.js'
+import { handleSpawnCubeCoinMessage } from './handleSpawnCubeCoinMessage.js'
 
 import {
   ConnectionMessage,
@@ -194,6 +196,10 @@ export class WebsocketSystem {
     this.addMessageHandler(
       ClientMessageType.SPAWN_CUBE,
       (ws: any, message: SpawnCubeMessage) => handleSpawnCubeMessage(ws, message)
+    )
+    this.addMessageHandler(
+      ClientMessageType.SPAWN_CUBE_COIN,
+      (ws: any, message: SpawnCubeCoinMessage) => handleSpawnCubeCoinMessage(ws, message)
     )
   }
 
