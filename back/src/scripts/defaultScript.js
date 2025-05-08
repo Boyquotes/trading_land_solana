@@ -231,6 +231,152 @@ new Car({
   name: 'Flying Car',
   color: '#78b5ff',
 })
+console.log('Flying Car spawned')
+console.log('Flying Car entity id:', car.entity.id)
+console.log('Flying Car mesh url:', car.meshUrl)
+
+// === Spawn 3D Models using Mesh class (THREE.js) ===
+
+// Try multiple approaches to ensure at least one works
+
+// Approach 1: Use a known working model (EzCar) as a test
+const testMesh1 = new Mesh({
+  position: {
+    x: 0,
+    y: 5,
+    z: -20 // Closer to starting position
+  },
+  scale: {
+    x: 2,
+    y: 2,
+    z: 2
+  },
+  meshUrl: 'https://notbloxo.fra1.cdn.digitaloceanspaces.com/Notblox-Assets/vehicle/EzCar.glb', // Known working model
+  physicsProperties: {
+    mass: 1,
+    enableCcd: true
+  }
+})
+
+testMesh1.entity.addNetworkComponent(
+  new TextComponent(testMesh1.entity.id, 'Test Model 1 (CDN)', 0, 3, 0, 20)
+)
+
+console.log('Test Model 1 spawned')
+console.log('Test Model 1 entity id:', testMesh1.entity.id)
+console.log('Test Model 1 mesh url:', testMesh1.meshUrl)
+
+// Approach 2: Try with MiniCharacter model
+const testMesh2 = new Mesh({
+  position: {
+    x: 10,
+    y: 5,
+    z: -20
+  },
+  scale: {
+    x: 2,
+    y: 2,
+    z: 2
+  },
+  meshUrl: 'https://notbloxo.fra1.cdn.digitaloceanspaces.com/Notblox-Assets/character/MiniCharacter.glb',
+  physicsProperties: {
+    mass: 1,
+    enableCcd: true
+  }
+})
+
+testMesh2.entity.addNetworkComponent(
+  new TextComponent(testMesh2.entity.id, 'Test Model 2 (Mini)', 0, 3, 0, 20)
+)
+
+console.log('Test Model 2 spawned')
+console.log('Test Model 2 entity id:', testMesh2.entity.id)
+console.log('Test Model 2 mesh url:', testMesh2.meshUrl)
+
+// Approach 3: Try with local path (if pepe.glb exists)
+const testMesh3 = new Mesh({
+  position: {
+    x: 20,
+    y: 5,
+    z: -20
+  },
+  scale: {
+    x: 20,
+    y: 20,
+    z: 20
+  },
+  meshUrl: 'http://localhost:4000/assets/craft_racer.glb', // Local path
+  physicsProperties: {
+    mass: 1,
+    enableCcd: true
+  }
+})
+
+testMesh3.entity.addNetworkComponent(
+  new TextComponent(testMesh3.entity.id, 'Test Model 3 (Local)', 0, 3, 0, 20)
+)
+
+console.log('Test Model 3 spawned')
+console.log('Test Model 3 entity id:', testMesh3.entity.id)
+console.log('Test Model 3 mesh url:', testMesh3.meshUrl)
+
+
+// Approach 4: Try with local path (if pepe.glb exists)
+const testMesh4 = new Mesh({
+  position: {
+    x: 200,
+    y: 50,
+    z: -40
+  },
+  scale: {
+    x: 2,
+    y: 2,
+    z: 2
+  },
+  meshUrl: 'http://localhost:4000/assets/pepeblendwebp.glb', // Local path
+  disableTextures: true, // Disable textures
+  customMaterial: {
+    color: '#00ff00', // Green color
+    roughness: 0.5,
+    metalness: 0.5
+  }
+})
+
+testMesh4.entity.addNetworkComponent(
+  new TextComponent(testMesh3.entity.id, 'Test Model 3 (Local)', 0, 3, 0, 20)
+)
+
+console.log('Test Model 4 spawned')
+console.log('Test Model 4 entity id:', testMesh4.entity.id)
+console.log('Test Model 4 mesh url:', testMesh4.meshUrl)
+
+
+
+const testMesh5 = new Mesh({
+  position: {
+    x: 20,
+    y: 5,
+    z: -20
+  },
+  scale: {
+    x: 20,
+    y: 20,
+    z: 20
+  },
+  meshUrl: 'http://localhost:4000/assets/cubee.glb', // Local path
+  physicsProperties: {
+    mass: 1,
+    enableCcd: true
+  }
+})
+
+testMesh5.entity.addNetworkComponent(
+  new TextComponent(testMesh5.entity.id, 'Test Model 5 (Local)', 0, 3, 0, 20)
+)
+
+console.log('Test Model 5 spawned')
+console.log('Test Model 5 entity id:', testMesh5.entity.id)
+console.log('Test Model 5 mesh url:', testMesh5.meshUrl)
 
 // Football test
 function spawnFootballBall() {

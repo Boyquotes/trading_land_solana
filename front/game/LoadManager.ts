@@ -12,6 +12,9 @@ export class LoadManager {
   private constructor() {
     this.dracoLoader.setDecoderPath('/draco/') // Replace with the actual path to the Draco decoder
     this.gltfLoader.setDRACOLoader(this.dracoLoader)
+    
+    // Log that we're initializing the loader
+    console.log('[LoadManager] Initialized GLTFLoader - Note: KHR_materials_pbrSpecularGlossiness warnings may appear but models will still load')
   }
 
   static getInstance(): LoadManager {
@@ -82,6 +85,61 @@ export class LoadManager {
     let mesh: THREE.Mesh = new THREE.Mesh()
     mesh.add(gltf.scene)
     mesh.animations = gltf.animations
+    
+    // Apply fallback materials for models with unsupported extensions or missing textures
+    this.applyFallbackMaterials(mesh);
+    
     return mesh
+  }
+  
+  /**
+   * Applies fallback materials to models with missing textures or unsupported extensions
+   * This helps with models that use KHR_materials_pbrSpecularGlossiness or other unsupported features
+   */
+  private applyFallbackMaterials(mesh: THREE.Mesh): void {
+    // Check if the model has any mesh children
+    let hasMeshChildren = false;
+    
+    mesh.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        hasMeshChildren = true;
+        
+        // Check if material is missing or has errors
+        if (!child.material || child.material.userData?.hasErrors) {
+          console.log('[LoadManager] Applying fallback material to mesh with missing or error materials');
+          
+          // Create a basic material with a random color
+          const color = new THREE.Color(Math.random() * 0xffffff);
+          child.material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.7,
+            metalness: 0.3
+          });
+        }
+        
+        // If this is a model with KHR_materials_pbrSpecularGlossiness extension
+        // We can detect this by checking for warnings in the console or material properties
+        if (child.material && (child.material as any).specularMap) {
+          console.log('[LoadManager] Converting specular-glossiness material to standard material');
+          
+          // Keep the existing color but update the material type
+          const color = child.material.color ? child.material.color : new THREE.Color(0x808080);
+          child.material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.5,  // Default roughness
+            metalness: 0.5   // Default metalness
+          });
+        }
+      }
+    });
+    
+    // If no mesh children were found, add a default cube as a fallback
+    if (!hasMeshChildren) {
+      console.log('[LoadManager] No mesh children found, adding fallback cube');
+      const geometry = new THREE.BoxGeometry(1, 1, 1);
+      const material = new THREE.MeshStandardMaterial({ color: 0xff00ff });
+      const cube = new THREE.Mesh(geometry, material);
+      mesh.add(cube);
+    }
   }
 }
