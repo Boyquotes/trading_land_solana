@@ -419,6 +419,7 @@ export default function GameHud({
       );
       const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean; valueStableCoin?: number | null }> = [];
       for (const [i, account] of accounts.entries()) {
+        if (i >= 4) break;
         const parsedAccountInfo: any = account.account.data;
         const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
         const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
@@ -1123,6 +1124,37 @@ async function connectSolana() {
     }
   }
 
+  // Mute state for sound
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Sync mute state with MeshSystem
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.log('[Sound Debug] GameHud setting mute state:', isMuted);
+      const evt = new CustomEvent('setMuteState', { detail: isMuted });
+      window.dispatchEvent(evt);
+    }
+  }, [isMuted]);
+
+  const handleMuteClick = () => {
+    console.log('[Sound Debug] Mute button clicked, current state:', isMuted);
+    if (typeof window.stopAllSounds === 'function') {
+      console.log('[Sound Debug] Calling stopAllSounds');
+      window.stopAllSounds();
+      setIsMuted(true);
+    } else {
+      console.log('[Sound Debug] No stopAllSounds function, toggling state');
+      setIsMuted(m => !m);
+    }
+  };
+
+  const handleUnmuteClick = () => {
+    console.log('[Sound Debug] Unmute button clicked');
+    setIsMuted(false);
+    console.log('[Sound Debug] Set isMuted to false');
+    // Optionally, add your own logic to resume sound
+  };
+
   const handleFullscreenClick = () => {
     if (document.fullscreenElement) {
       document.exitFullscreen()
@@ -1137,6 +1169,28 @@ async function connectSolana() {
       className="fixed inset-0 bg-gray-800 bg-opacity-0 text-white p-4 z-50 pointer-events-none"
       ref={refContainer}
     >
+      <div className="fixed top-4 left-4 z-50 pointer-events-auto">
+        <button
+          onClick={isMuted ? handleUnmuteClick : handleMuteClick}
+          className="mt-4 w-12 h-12 flex items-center justify-center rounded-full bg-white/90 hover:bg-gray-200 border border-gray-300 shadow-lg transition-all focus:outline-none"
+          title={isMuted ? "Unmute All Sounds" : "Mute All Sounds"}
+          style={{ boxShadow: '0 6px 24px 0 rgba(0,0,0,0.08)' }}
+        >
+          {isMuted ? (
+            // Speaker Off Icon
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-gray-700">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9v6h4l5 5V4l-5 5H9z" />
+              <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          ) : (
+            // Speaker Icon
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-gray-700">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9v6h4l5 5V4l-5 5H9z" />
+            </svg>
+          )}
+        </button>
+      </div>
+
       {/* Wallet Count Badge & Dropdown */}
       <div className="fixed top-4 right-4 z-50 pointer-events-auto" ref={walletDropdownRef}>
         <div

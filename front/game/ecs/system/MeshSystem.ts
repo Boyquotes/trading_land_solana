@@ -26,6 +26,66 @@ export class MeshSystem {
       }
 
       const meshComponent = addedEvent.component
+
+// --- Sound Management ---
+const globalPlayingSounds: HTMLAudioElement[] = (window as any)._globalPlayingSounds || [];
+(window as any)._globalPlayingSounds = globalPlayingSounds;
+// Global mute flag
+(window as any)._soundsMuted = (window as any)._soundsMuted || false;
+// Flag to prevent sounds on initial load
+(window as any)._initialLoadComplete = (window as any)._initialLoadComplete || false;
+// Set initial load complete after a short delay
+if (typeof window !== 'undefined' && !(window as any)._initialLoadComplete) {
+  setTimeout(() => {
+    console.log('[Sound Debug] Initial load complete, sounds will play on future events');
+    (window as any)._initialLoadComplete = true;
+  }, 3000); // 3 seconds delay
+}
+// Listen to mute state from GameHud
+if (typeof window !== 'undefined') {
+  window.addEventListener('setMuteState', (e: any) => {
+    console.log('[Sound Debug] MeshSystem received mute state:', e.detail);
+    (window as any)._soundsMuted = e.detail;
+    if (e.detail) {
+      console.log('[Sound Debug] Stopping all sounds');
+      if (typeof window.stopAllSounds === 'function') window.stopAllSounds();
+    }
+  });
+}
+
+function stopAllSounds() {
+  console.log('[Sound Debug] stopAllSounds called, active sounds:', globalPlayingSounds.length);
+  globalPlayingSounds.forEach(audio => {
+    audio.pause();
+    audio.currentTime = 0;
+  });
+  globalPlayingSounds.length = 0;
+  (window as any)._soundsMuted = true;
+  console.log('[Sound Debug] All sounds stopped, muted state:', (window as any)._soundsMuted);
+}
+(window as any).stopAllSounds = stopAllSounds;
+// --- End Sound Management ---
+
+      // Play sound for each spawned box
+      console.log('[Sound Debug] Attempting to play sound, muted state:', (window as any)._soundsMuted, 'initial load complete:', (window as any)._initialLoadComplete);
+      // Only play if not muted AND initial load is complete
+      if (!(window as any)._soundsMuted && (window as any)._initialLoadComplete) {
+        try {
+          const audio = new window.Audio('/audio/gling_gling_coin.wav');
+          audio.currentTime = 0;
+          audio.play().catch((e) => {
+            // Some browsers may block autoplay
+            console.warn('Unable to play gling_gling_coin.wav:', e);
+          });
+          globalPlayingSounds.push(audio);
+          audio.addEventListener('ended', () => {
+            const idx = globalPlayingSounds.indexOf(audio);
+            if (idx > -1) globalPlayingSounds.splice(idx, 1);
+          });
+        } catch (err) {
+          console.error('Failed to play gling_gling_coin.wav:', err);
+        }
+      }
       // Apply texture if TextureComponent is present
       // Import TextureComponent directly for type checking
       // eslint-disable-next-line @typescript-eslint/no-var-requires
