@@ -5,13 +5,13 @@ import path from 'path';
 /**
  * API handler to save wallet data to a JSON file
  * POST /api/save-wallet
- * Body: { address: string, walletData: object }
+ * Body: { address: string, walletData: object, date: string }
  */
 export async function POST(request: NextRequest) {
   try {
     // Parse the request body
     const requestData = await request.json();
-    const { address, walletData } = requestData;
+    const { address, walletData, date } = requestData;
     
     // Validate input
     if (!address || !walletData) {
@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
     // Sanitize the address to create a valid filename
     // Remove any characters that might be invalid in a filename
     const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
-    const fileName = `${sanitizedAddress}.json`;
+    // Use the provided date for the filename
+    const fileName = `${sanitizedAddress}-${date}.json`;
     
     // Define the directory path and ensure it exists
     const walletsDir = path.join(process.cwd(), 'public', 'wallets');
@@ -43,10 +44,11 @@ export async function POST(request: NextRequest) {
       message: `Wallet data saved to ${fileName}`,
       path: `/wallets/${fileName}`
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error saving wallet data:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to save wallet data', details: error.message },
+      { error: 'Failed to save wallet data', details: errorMessage },
       { status: 500 }
     );
   }

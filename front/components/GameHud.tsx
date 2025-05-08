@@ -486,10 +486,15 @@ export default function GameHud({
       
       // Save wallet data to file in public/wallets/ directory
       try {
+        // Format date as year-month-day-hh-mm-ss
+        const now = new Date();
+        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+        
         // Create a clean version of the wallet data to save (avoid circular references)
         const walletData = {
           address,
-          fetchedAt: new Date().toISOString(),
+          fetchedAt: now.toISOString(),
+          date: formattedDate,
           totalTokens,
           tokens: tokens.map(token => ({
             mint: token.mint,
@@ -510,7 +515,8 @@ export default function GameHud({
           },
           body: JSON.stringify({
             address,
-            walletData
+            walletData,
+            date: formattedDate
           }),
         });
         

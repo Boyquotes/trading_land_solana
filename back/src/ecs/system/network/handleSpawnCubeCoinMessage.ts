@@ -23,8 +23,8 @@ export function handleSpawnCubeCoinMessage(ws: any, message: SpawnCubeCoinMessag
     const meshParams = {
       position,
       scale: { x: 2, y: 2, z: 2 }, // Scale the model appropriately
-      //meshUrl: 'http://localhost:4000/assets/cubee.glb', // Use the specified GLB model
-      meshUrl: 'http://localhost:4000/assets/pepeblendwebp.glb', // Use the specified GLB model
+      meshUrl: 'http://localhost:4000/assets/cubee.glb', // Use the specified GLB model
+      //meshUrl: 'http://localhost:4000/assets/pepeblendwebp.glb', // Use the specified GLB model
       physicsProperties: {
         mass: 1,
         enableCcd: true
