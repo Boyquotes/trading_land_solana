@@ -313,7 +313,7 @@ const testMesh3 = new Mesh({
 })
 
 testMesh3.entity.addNetworkComponent(
-  new TextComponent(testMesh3.entity.id, 'Test Model 3 (Local)', 0, 3, 0, 20)
+  new TextComponent(testMesh3.entity.id, 'Craft Racer (Local)', 0, 3, 0, 20)
 )
 
 console.log('Test Model 3 spawned')
@@ -343,7 +343,7 @@ const testMesh4 = new Mesh({
 })
 
 testMesh4.entity.addNetworkComponent(
-  new TextComponent(testMesh3.entity.id, 'Test Model 3 (Local)', 0, 3, 0, 20)
+  new TextComponent(testMesh3.entity.id, 'PEPE (Local)', 0, 3, 0, 20)
 )
 
 console.log('Test Model 4 spawned')

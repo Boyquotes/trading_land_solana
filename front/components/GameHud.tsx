@@ -1,6 +1,7 @@
 /* eslint-disable react/jsx-no-undef */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Joystick } from 'react-joystick-component'
+import axios from 'axios'
 import { Game } from '@/game/Game'
 import Link from 'next/link'
 import { SerializedMessageType } from '@shared/network/server/serialized'
@@ -20,8 +21,7 @@ import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
 import {
   Metadata,
   findMetadataPda,
-} from '@metaplex-foundation/mpl-token-metadata';;
-import axios from 'axios';
+} from '@metaplex-foundation/mpl-token-metadata';
 import { PythHttpClient, getPythClusterApiUrl } from "@pythnetwork/client";
 
 // Extend the Window interface to include wallet providers
@@ -37,6 +37,88 @@ export interface GameHudProps {
   messages: MessageComponent[]
   sendMessage: (message: string) => void
   gameInstance: Game
+}
+
+// Prices Table Component
+function PricesTable() {
+  const [prices, setPrices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Symbols to exclude from display
+  const excludedSymbols = ['CRO', 'AAVE', 'DAI', 'UNI', 'LINK', 'USDC', 'ETH', 'USDT', 'GT', 'FDUSD'];
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        setLoading(true);
+        // Use the local API proxy instead of directly calling the external API
+        const response = await axios.get('/api/prices');
+        
+        // Filter out excluded symbols and get first 30 items
+        const filteredItems = response.data.data
+          .filter((item: any) => !excludedSymbols.includes(item.symbol))
+          .slice(0, 30);
+          
+        setPrices(filteredItems);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching prices:', err);
+        setError('Failed to load prices data');
+        setLoading(false);
+      }
+    };
+
+    fetchPrices();
+    
+    // Refresh data every 60 seconds
+    const intervalId = setInterval(fetchPrices, 60000);
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-4">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-red-400 text-sm py-2">{error}</div>
+    );
+  }
+
+  return (
+    <table className="w-full text-sm text-left text-white">
+      <thead className="text-xs uppercase bg-gray-700 bg-opacity-50">
+        <tr>
+          <th scope="col" className="px-2 py-1">Symbol</th>
+          <th scope="col" className="px-2 py-1">Price (USD)</th>
+          <th scope="col" className="px-2 py-1">1h %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {prices.length > 0 ? (
+          prices.map((price, index) => (
+            <tr key={index} className="border-b border-gray-700 border-opacity-50 hover:bg-gray-600 hover:bg-opacity-30">
+              <td className="px-2 py-1 font-medium">{price.symbol}</td>
+              <td className="px-2 py-1">${Number(price.price_usd).toFixed(2)}</td>
+              <td className={`px-2 py-1 ${Number(price.percentChange1h) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {Number(price.percentChange1h) >= 0 ? '+' : ''}{Number(price.percentChange1h).toFixed(2)}%
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan={3} className="px-2 py-4 text-center">No trades available</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
 }
 
 export default function GameHud({
@@ -77,6 +159,12 @@ export default function GameHud({
 
   // Track last CoinGecko API call time to implement rate limiting
   const [lastCoinGeckoCall, setLastCoinGeckoCall] = useState<number>(0);
+  
+  // State to track if prices box is expanded or collapsed
+  const [isPricesBoxExpanded, setIsPricesBoxExpanded] = useState<boolean>(false);
+  
+  // State to track if trades box is expanded or collapsed
+  const [isTradesBoxExpanded, setIsTradesBoxExpanded] = useState<boolean>(false);
 
   // Fetch price for a CoinGecko ID with rate limiting to avoid 429 Too Many Requests errors
   async function fetchTokenPrice(coinGeckoId: string): Promise<number | null> {
@@ -1387,6 +1475,85 @@ async function connectSolana() {
         <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {getTokenMetadata("3SghkPdBSrpF9bzdAy5LwR4nGgFbqNcC6ZSq8vtZdj91");}}>
           <div className="text-sm flex justify-center text-white pointer-events-auto">
               <span className="font-medium">Check Metadata</span>
+          </div>
+        </div>
+      </div>
+
+      {/* My Trades Box */}
+      <div className="fixed bottom-4 left-4 pointer-events-auto">
+        <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20 max-w-xs transition-all duration-300 ease-in-out">
+          <p 
+            className="text-sm font-bold cursor-pointer flex items-center justify-between"
+            onClick={() => setIsTradesBoxExpanded(!isTradesBoxExpanded)}
+          >
+            My Trades
+            <span className={`ml-2 transform transition-transform duration-300 ${isTradesBoxExpanded ? 'rotate-180' : ''}`}>
+              ▲
+            </span>
+          </p>
+          <div 
+            className={`overflow-hidden transition-all duration-300 ease-in-out ${isTradesBoxExpanded ? 'max-h-60' : 'max-h-0'}`}
+          >
+            <div className="text-xs space-y-2">
+              <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
+                <div className="flex justify-between">
+                  <span className="font-bold text-green-400">LONG</span>
+                  <span className="font-bold">20 JUP</span>
+                  <span>x10</span>
+                </div>
+                <div className="flex justify-between text-gray-300">
+                  <span>Entry: $1.2</span>
+                  <span>TP: 22%</span>
+                  <span>SL: 5%</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
+                <div className="flex justify-between">
+                  <span className="font-bold text-green-400">LONG</span>
+                  <span className="font-bold">50 PYTH</span>
+                  <span>x5</span>
+                </div>
+                <div className="flex justify-between text-gray-300">
+                  <span>Entry: $2</span>
+                  <span>TP: 20%</span>
+                  <span>SL: 5%</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
+                <div className="flex justify-between">
+                  <span className="font-bold text-red-400">SHORT</span>
+                  <span className="font-bold">2 SOL</span>
+                  <span>x2</span>
+                </div>
+                <div className="flex justify-between text-gray-300">
+                  <span>Entry: $200</span>
+                  <span>TP: 12%</span>
+                  <span>SL: 3%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Prices Box */}
+      <div className="fixed bottom-4 right-4 pointer-events-auto">
+        <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20 max-w-xs transition-all duration-300 ease-in-out">
+          <p 
+            className="text-sm font-bold cursor-pointer flex items-center justify-between"
+            onClick={() => setIsPricesBoxExpanded(!isPricesBoxExpanded)}
+          >
+            Prices
+            <span className={`ml-2 transform transition-transform duration-300 ${isPricesBoxExpanded ? 'rotate-180' : ''}`}>
+              ▲
+            </span>
+          </p>
+          <div 
+            className={`overflow-hidden transition-all duration-300 ease-in-out ${isPricesBoxExpanded ? 'max-h-60' : 'max-h-0'}`}
+          >
+            <PricesTable />
           </div>
         </div>
       </div>
