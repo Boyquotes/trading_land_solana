@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { SerializedMessageType } from '@shared/network/server/serialized'
 import { MessageComponent } from '@shared/component/MessageComponent'
 import { Maximize } from 'lucide-react'
+import Image from 'next/image'
 import { MicroGameCard } from './GameCard'
 import { GameInfo } from '@/types'
 import gameData from '../public/gameData.json'
@@ -165,6 +166,61 @@ export default function GameHud({
   
   // State to track if trades box is expanded or collapsed
   const [isTradesBoxExpanded, setIsTradesBoxExpanded] = useState<boolean>(false);
+  
+  // State to track if Drift trades are visible
+  const [isDriftTradesVisible, setIsDriftTradesVisible] = useState<boolean>(true);
+  
+  // State to track if portfolio box is expanded or collapsed
+  const [isPortfolioBoxExpanded, setIsPortfolioBoxExpanded] = useState<boolean>(false);
+  
+  // Portfolio data state
+  const [portfolioData, setPortfolioData] = useState<Array<{
+    _id: string;
+    symbol: string;
+    actualPrice: number;
+    averagePrice: number;
+    numberCoin: number;
+    exchange: string[];
+    totalActualPrice: number;
+    totalPrice: number;
+    dateImport: string;
+  }>>([]);
+  
+  // Loading state for portfolio data
+  const [loadingPortfolioData, setLoadingPortfolioData] = useState<boolean>(false);
+  
+  // Calculate total portfolio value
+  const totalPortfolioValue = useMemo(() => {
+    return portfolioData.reduce((total, item) => total + item.totalActualPrice, 0).toFixed(2);
+  }, [portfolioData]);
+
+  // Fetch portfolio data from API
+  useEffect(() => {
+    const fetchPortfolioData = async () => {
+      try {
+        setLoadingPortfolioData(true);
+        const response = await axios.get('/api/portfolio');
+        setPortfolioData(response.data.data);
+      } catch (error) {
+        console.error('Error fetching portfolio data:', error);
+        // Set a notification about the error
+        const notifId = Date.now();
+        setNotifications([{ 
+          id: notifId, 
+          content: `Failed to load portfolio data`, 
+          author: "System", 
+          timestamp: notifId 
+        }]);
+        setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+        }, 5000);
+      } finally {
+        setLoadingPortfolioData(false);
+      }
+    };
+
+    fetchPortfolioData();
+  }, []);
 
   // Fetch price for a CoinGecko ID with rate limiting to avoid 429 Too Many Requests errors
   async function fetchTokenPrice(coinGeckoId: string): Promise<number | null> {
@@ -1308,13 +1364,69 @@ async function connectSolana() {
 
       {/* Wallet Count Badge & Dropdown */}
       <div className="fixed top-4 right-4 z-50 pointer-events-auto" ref={walletDropdownRef}>
-        <div
-          className="bg-blue-600 text-white rounded-full px-4 py-2 shadow-lg text-sm font-semibold flex items-center gap-2 cursor-pointer select-none"
-          onClick={() => setWalletDropdownOpen(v => !v)}
-        >
-          <span className="inline-block w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-          {addresses.length} wallet{addresses.length !== 1 ? 's' : ''} connected
+        <div className="flex gap-2">
+          <div
+            className="bg-blue-600 text-white rounded-full px-4 py-2 shadow-lg text-sm font-semibold flex items-center gap-2 cursor-pointer select-none"
+            onClick={() => {
+              setWalletDropdownOpen(v => !v);
+              // Close portfolio dropdown when wallet dropdown is toggled
+              setIsPortfolioBoxExpanded(false);
+            }}
+          >
+            <span className="inline-block w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+            {addresses.length} wallet{addresses.length !== 1 ? 's' : ''} connected
+          </div>
+          
+          <div
+            className="bg-green-600 text-white rounded-full px-4 py-2 shadow-lg text-sm font-semibold flex items-center gap-2 cursor-pointer select-none"
+            onClick={() => {
+              setIsPortfolioBoxExpanded(v => !v);
+              // Close wallet dropdown when portfolio dropdown is toggled
+              setWalletDropdownOpen(false);
+            }}
+          >
+            <span>My Portfolio</span>
+            {!loadingPortfolioData && portfolioData.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-green-700 rounded-full text-xs">
+                ${totalPortfolioValue}
+              </span>
+            )}
+          </div>
         </div>
+        
+        {/* Portfolio Box */}
+        {isPortfolioBoxExpanded && (
+          <div className="absolute right-0 mt-2 w-72 bg-gray-800 bg-opacity-80 text-white rounded-lg shadow-2xl py-2 pointer-events-auto animate-fade-in z-50">
+            <div className="max-h-80 overflow-y-auto px-2 py-1">
+              {loadingPortfolioData ? (
+                <div className="flex justify-center items-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                </div>
+              ) : portfolioData.length === 0 ? (
+                <div className="text-center py-4 text-gray-400">
+                  No portfolio data available
+                </div>
+              ) : (
+                portfolioData.map((item) => (
+                  <div key={item._id} className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded mb-2 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold">
+                        {item.numberCoin >= 1000 ? 
+                          item.numberCoin.toLocaleString('en-US', {maximumFractionDigits: 2}) : 
+                          item.numberCoin.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 6})}
+                        {' '}{item.symbol}
+                      </span>
+                      <span>${item.actualPrice.toFixed(item.actualPrice < 0.01 ? 6 : 2)}</span>
+                    </div>
+                    <div className="text-right text-green-400 font-semibold">
+                      ${item.totalActualPrice.toFixed(2)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
         {walletDropdownOpen && (
           <div className="absolute right-0 mt-2 w-72 bg-white text-gray-900 rounded-lg shadow-2xl border border-gray-200 py-2 animate-fade-in z-50">
             <div className="px-4 py-2 font-semibold border-b border-gray-100 text-sm">Connected Wallets</div>
@@ -1492,45 +1604,70 @@ async function connectSolana() {
             </span>
           </p>
           <div 
-            className={`overflow-hidden transition-all duration-300 ease-in-out ${isTradesBoxExpanded ? 'max-h-60' : 'max-h-0'}`}
+            className={`overflow-hidden transition-all duration-300 ease-in-out ${isTradesBoxExpanded ? 'max-h-80' : 'max-h-0'}`}
           >
-            <div className="text-xs space-y-2">
-              <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
-                <div className="flex justify-between">
-                  <span className="font-bold text-green-400">LONG</span>
-                  <span className="font-bold">20 JUP</span>
-                  <span>x10</span>
+            <div className="flex flex-col space-y-2">
+              {/* Drift Platform */}
+              <div 
+                className="flex items-center bg-gray-700 bg-opacity-30 p-1.5 rounded cursor-pointer"
+                onClick={() => setIsDriftTradesVisible(!isDriftTradesVisible)}
+              >
+                <div className="relative w-5 h-5 mr-2">
+                  <Image 
+                    src="/assets/logos/DRIFT.png" 
+                    alt="Drift Logo" 
+                    width={20} 
+                    height={20} 
+                    className="object-contain"
+                  />
                 </div>
-                <div className="flex justify-between text-gray-300">
-                  <span>Entry: $1.2</span>
-                  <span>TP: 22%</span>
-                  <span>SL: 5%</span>
-                </div>
+                <span className="text-xs font-semibold">Drift</span>
+                <span className={`ml-auto transform transition-transform duration-300 ${isDriftTradesVisible ? 'rotate-180' : ''}`}>
+                  ▲
+                </span>
               </div>
               
-              <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
-                <div className="flex justify-between">
-                  <span className="font-bold text-green-400">LONG</span>
-                  <span className="font-bold">50 PYTH</span>
-                  <span>x5</span>
-                </div>
-                <div className="flex justify-between text-gray-300">
-                  <span>Entry: $2</span>
-                  <span>TP: 20%</span>
-                  <span>SL: 5%</span>
-                </div>
-              </div>
-              
-              <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
-                <div className="flex justify-between">
-                  <span className="font-bold text-red-400">SHORT</span>
-                  <span className="font-bold">2 SOL</span>
-                  <span>x2</span>
-                </div>
-                <div className="flex justify-between text-gray-300">
-                  <span>Entry: $200</span>
-                  <span>TP: 12%</span>
-                  <span>SL: 3%</span>
+              {/* Trade list - conditionally rendered based on visibility state */}
+              <div className={`text-xs space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${isDriftTradesVisible ? 'max-h-60' : 'max-h-0'}`}>
+                <div className="space-y-2">
+                  <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="font-bold text-green-400">LONG</span>
+                      <span className="font-bold">20 JUP</span>
+                      <span>x10</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Entry: $1.2</span>
+                      <span>TP: 22%</span>
+                      <span>SL: 5%</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="font-bold text-green-400">LONG</span>
+                      <span className="font-bold">50 PYTH</span>
+                      <span>x5</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Entry: $2</span>
+                      <span>TP: 20%</span>
+                      <span>SL: 5%</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="font-bold text-red-400">SHORT</span>
+                      <span className="font-bold">2 SOL</span>
+                      <span>x2</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Entry: $200</span>
+                      <span>TP: 12%</span>
+                      <span>SL: 3%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
