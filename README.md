@@ -2,10 +2,6 @@
 
 DeFi on-chain games to manage our portfolio in 3D and 2D, launch in-game trade on principal DEX/CEX, stay focused on market movement with a gamification system to make more good trade.
  
-### Online Demo  
-
-
-
 ### Controls
 
 - W : Forward
