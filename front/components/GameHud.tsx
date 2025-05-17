@@ -177,9 +177,12 @@ export default function GameHud({
   const [portfolioData, setPortfolioData] = useState<Array<{
     _id: string;
     symbol: string;
+    mint: string;
     actualPrice: number;
     averagePrice: number;
     numberCoin: number;
+    name: string;
+    logo: string;
     exchange: string[];
     totalActualPrice: number;
     totalPrice: number;
@@ -196,10 +199,16 @@ export default function GameHud({
 
   // Fetch portfolio data from API
   useEffect(() => {
-    const fetchPortfolioData = async () => {
+    const fetchPortfolioData = async (walletAddress?: string) => {
       try {
         setLoadingPortfolioData(true);
-        const response = await axios.get('/api/portfolio');
+        // Use the address parameter if provided
+        const url = walletAddress 
+          ? `/api/portfolio?address=${walletAddress}` 
+          : '/api/portfolio';
+        
+        console.log(`Fetching portfolio data from: ${url}`);
+        const response = await axios.get(url);
         setPortfolioData(response.data.data);
       } catch (error) {
         console.error('Error fetching portfolio data:', error);
@@ -219,7 +228,18 @@ export default function GameHud({
       }
     };
 
-    fetchPortfolioData();
+    // Start with no specific address
+    // fetchPortfolioData();
+    
+    // Add this function to the component's scope so it can be called elsewhere
+    // For example, when a user selects a specific wallet
+    // Define the type properly to avoid TypeScript errors
+    interface CustomWindow extends Window {
+      fetchWalletPortfolio?: (address?: string) => Promise<void>;
+    }
+    
+    // Assign the function to the window object
+    (window as CustomWindow).fetchWalletPortfolio = fetchPortfolioData;
   }, []);
 
   // Fetch price for a CoinGecko ID with rate limiting to avoid 429 Too Many Requests errors
@@ -537,8 +557,127 @@ export default function GameHud({
     setLoadingPrice(prev => ({ ...prev, [address]: false }));
   }
 
+  // Get signatures for address using Solana web3.js
+  async function getSignaturesForAddress(address: string) {
+    console.log(`Getting signatures for address: ${address}`);
+    try {
+      // Create a PublicKey from the address string
+      const publicKey = new PublicKey(address);
+      
+      // Show loading notification
+      const loadingId = Date.now();
+      setNotifications([{ 
+        id: loadingId, 
+        content: `Fetching transaction history for ${address.slice(0, 4)}...${address.slice(-4)}`, 
+        author: "Solana Explorer", 
+        timestamp: loadingId 
+      }]);
+      
+      // We need to paginate to get 2000 transactions
+      let allSignatures: any[] = [];
+      let lastSignature = null;
+      let hasMore = true;
+      
+      // Loop until we have 2000 signatures or there are no more to fetch
+      while (allSignatures.length < 2000 && hasMore) {
+        // Prepare options for the API call
+        const options: any = { limit: 100 }; // Fetch 100 at a time (API limit)
+        if (lastSignature) {
+          options.before = lastSignature;
+        }
+        
+        // Get batch of signatures
+        const signaturesBatch = await solanaConnection.getSignaturesForAddress(publicKey, options);
+        
+        // If we got fewer than requested, we've reached the end
+        if (signaturesBatch.length < 100) {
+          hasMore = false;
+        }
+        
+        // Add this batch to our collection
+        allSignatures = [...allSignatures, ...signaturesBatch];
+        
+        // Update the loading notification
+        setNotifications([{ 
+          id: loadingId, 
+          content: `Fetched ${allSignatures.length} transactions so far...`, 
+          author: "Solana Explorer", 
+          timestamp: loadingId 
+        }]);
+        
+        // If we have more to fetch, set the last signature for pagination
+        if (hasMore && signaturesBatch.length > 0) {
+          lastSignature = signaturesBatch[signaturesBatch.length - 1].signature;
+        }
+      }
+      
+      // Clear the loading notification
+      setNotifications((prev) => prev.filter((n) => n.id !== loadingId));
+      
+      console.log(`Found ${allSignatures.length} signatures for address ${address}:`);
+      
+      // Find the earliest transaction (wallet creation date)
+      let earliestTransaction = null;
+      
+      for (const sig of allSignatures) {
+        if (sig.blockTime && (!earliestTransaction || sig.blockTime < earliestTransaction.blockTime)) {
+          earliestTransaction = sig;
+        }
+      }
+      
+      // Format and display the wallet creation date
+      let walletCreationDate = 'Unknown';
+      if (earliestTransaction && earliestTransaction.blockTime) {
+        const date = new Date(earliestTransaction.blockTime * 1000);
+        walletCreationDate = date.toLocaleString();
+        console.log('Wallet creation date (earliest transaction):', walletCreationDate);
+        console.log('Earliest transaction:', earliestTransaction);
+      }
+      
+      // Log each signature with its details (just the first 50 to avoid console overload)
+      allSignatures.slice(0, 50).forEach((sig, index) => {
+        console.log(`Signature ${index + 1}:`, {
+          signature: sig.signature,
+          slot: sig.slot,
+          blockTime: sig.blockTime ? new Date(sig.blockTime * 1000).toLocaleString() : 'unknown',
+          err: sig.err ? 'Failed' : 'Success',
+          memo: sig.memo || 'No memo',
+          confirmationStatus: sig.confirmationStatus
+        });
+      });
+      
+      // Add a notification to inform the user
+      const notifId = Date.now();
+      setNotifications([{ 
+        id: notifId, 
+        content: `Found ${allSignatures.length} transactions. Wallet creation: ${walletCreationDate}`, 
+        author: "Solana Explorer", 
+        timestamp: notifId 
+      }]);
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+      }, 10000); // Show this one a bit longer
+      
+    } catch (error) {
+      console.error('Error getting signatures:', error);
+      
+      // Show error notification
+      const notifId = Date.now();
+      setNotifications([{ 
+        id: notifId, 
+        content: `Error fetching transaction history: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        author: "Solana Explorer", 
+        timestamp: notifId 
+      }]);
+      setTimeout(() => {
+        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+      }, 5000);
+    }
+  }
+  
   // Check portfolio for a single address
   async function checkPortfolioForAddress(address: string) {
+    console.log(`Checking portfolio for address: ${address}`);
     setLoadingPortfolio(prev => ({ ...prev, [address]: true }));
     setLiveTokenCount(prev => ({ ...prev, [address]: 0 }));
     let newWallet = { ...wallet };
@@ -1383,6 +1522,25 @@ async function connectSolana() {
               setIsPortfolioBoxExpanded(v => !v);
               // Close wallet dropdown when portfolio dropdown is toggled
               setWalletDropdownOpen(false);
+              
+              // Call checkPortfolioForAddress with the first connected address if available
+              if (addresses.length > 0) {
+                const firstAddress = addresses[0];
+                console.log(`Clicking My Portfolio - using first address: ${firstAddress}`);
+                checkPortfolioForAddress(firstAddress);
+                
+                // Also fetch portfolio data using the API with this address
+                // Use the proper type definition for the window object
+                interface CustomWindow extends Window {
+                  fetchWalletPortfolio?: (address?: string) => Promise<void>;
+                }
+                
+                const customWindow = window as CustomWindow;
+                // Use optional chaining to safely call the function if it exists
+                customWindow.fetchWalletPortfolio?.(firstAddress);
+              } else {
+                console.log('No addresses connected, cannot check portfolio');
+              }
             }}
           >
             <span>My Portfolio</span>
@@ -1409,17 +1567,38 @@ async function connectSolana() {
               ) : (
                 portfolioData.map((item) => (
                   <div key={item._id} className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded mb-2 text-xs">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold">
-                        {item.numberCoin >= 1000 ? 
-                          item.numberCoin.toLocaleString('en-US', {maximumFractionDigits: 2}) : 
-                          item.numberCoin.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 6})}
-                        {' '}{item.symbol}
-                      </span>
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="flex items-center">
+                        {item.logo && (
+                          <div className="w-5 h-5 mr-1 overflow-hidden rounded-full">
+                            <Image 
+                              src={item.logo} 
+                              alt={item.symbol} 
+                              width={20} 
+                              height={20} 
+                              className="object-contain"
+                              onError={(e) => {
+                                // Handle image load errors
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
+                        <span className="font-bold">
+                          {item.numberCoin >= 1000 ? 
+                            item.numberCoin.toLocaleString('en-US', {maximumFractionDigits: 2}) : 
+                            item.numberCoin.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 6})}
+                          {' '}{item.symbol}
+                        </span>
+                      </div>
                       <span>${item.actualPrice.toFixed(item.actualPrice < 0.01 ? 6 : 2)}</span>
                     </div>
-                    <div className="text-right text-green-400 font-semibold">
-                      ${item.totalActualPrice.toFixed(2)}
+                    <div className="flex justify-between items-center text-xs text-gray-300">
+                      <span className="truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                      <span className="text-right text-green-400 font-semibold">
+                        ${item.totalActualPrice.toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 ))
@@ -1568,9 +1747,9 @@ async function connectSolana() {
       </div>
 
       <div className="flex justify-between items-center">
-        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {checkPortfolio();}}>
+        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {getSignaturesForAddress("GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S");}}>
           <div className="text-sm flex justify-center text-white pointer-events-auto">
-              <span className="font-medium">Check Portfolio</span>
+              <span className="font-medium">get_signatures_for_address</span>
           </div>
         </div>
       </div>
@@ -1723,5 +1902,5 @@ async function connectSolana() {
         </div>
       </div>
     </div>
-  )
+  );
 }
