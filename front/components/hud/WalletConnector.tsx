@@ -444,6 +444,15 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
           customWindow.fetchWalletPortfolio(address);
           console.log(`Triggered Portfolio update for address: ${address}`);
         }
+        
+        // Récupérer l'historique des transactions du portefeuille
+        if ((window as any).getWalletTransactions) {
+          // Attendre un peu pour ne pas surcharger l'API
+          setTimeout(() => {
+            (window as any).getWalletTransactions(address);
+            console.log(`Triggered transaction history fetch for address: ${address}`);
+          }, 2000);
+        }
       }
       
       // Afficher une notification de succès

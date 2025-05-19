@@ -21,7 +21,8 @@ import {
   ChatBox,
   WalletConnector,
   WalletDropdown,
-  RecentTrades
+  RecentTrades,
+  WalletTransactions
 } from './hud'
 
 export interface GameHudProps {
@@ -194,7 +195,7 @@ export default function GameHud({
       <Notifications notifications={notifications} />
 
       {/* Bottom left - Prices Box */}
-      <div className="fixed bottom-4 left-4 pointer-events-auto">
+      {/* <div className="fixed bottom-4 left-4 pointer-events-auto">
         <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20 max-w-xs transition-all duration-300 ease-in-out">
           <p 
             className="text-sm font-bold cursor-pointer flex items-center justify-between"
@@ -212,16 +213,16 @@ export default function GameHud({
             </div>
           )}
         </div>
-      </div>
+      </div> */}
 
       {/* Bottom left - Trades Box (positioned below Prices Box) */}
-      <RecentTrades 
+      {/* <RecentTrades 
         isTradesBoxExpanded={isTradesBoxExpanded}
         setIsTradesBoxExpanded={setIsTradesBoxExpanded}
-      />
+      /> */}
 
-      {/* Bottom left - Portfolio Box (positioned below Trades Box) */}
-      <div className="fixed bottom-4 left-4 transform translate-y-40 pointer-events-auto">
+      {/* Portfolio Box - Positioned at the bottom left */}
+      <div className="fixed bottom-4 left-4 pointer-events-auto z-50">
         <Portfolio 
           isPortfolioBoxExpanded={isPortfolioBoxExpanded}
           setIsPortfolioBoxExpanded={setIsPortfolioBoxExpanded}
@@ -230,17 +231,21 @@ export default function GameHud({
       </div>
 
       {/* Bottom right - Audio controls */}
-      <AudioControls gameInstance={gameInstance} />
+      {/* <AudioControls gameInstance={gameInstance} /> */}
 
       {/* Bottom right - Chat box */}
+      {/*
       <div className="fixed bottom-20 right-4 pointer-events-auto">
-      <Portfolio 
-          isPortfolioBoxExpanded={isPortfolioBoxExpanded}
-          setIsPortfolioBoxExpanded={setIsPortfolioBoxExpanded}
-          setNotifications={setNotifications}
-        />
-        {/* <ChatBox messages={messageComponents} sendMessage={sendMessage} /> */}
+         <ChatBox messages={messageComponents} sendMessage={sendMessage} />
       </div>
+      */}
+      
+      {/* Invisible component for wallet transactions */}
+      <WalletTransactions
+        address={addresses[0]}
+        solanaConnection={solanaConnection}
+        setNotifications={setNotifications}
+      />
     </div>
   );
 }
