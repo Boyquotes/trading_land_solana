@@ -357,7 +357,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       
       // Process each token account
       let liveTokens = 0;
-      let stop = 2;
+      let stop = 6;
       for (const token of tokenAccounts) {
         if (stop-- <= 0) break;
         // Skip tokens with zero balance
@@ -433,30 +433,25 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       });
       
       // Rafraîchir les prix des tokens
-      // Note: Cette fonction doit être appelée après la mise à jour du portefeuille
       refreshTokenPrices(address);
       
-      // Show notification
-      const notifId = generateUniqueNotificationId();
-      const now = Date.now();
-      setNotifications(prev => [...prev, { 
-        id: notifId, 
-        content: `Found ${liveTokens} tokens in wallet`, 
-        author: "Portfolio", 
-        timestamp: now 
-      }]);
-      setTimeout(() => {
-        setNotifications(prev => prev.filter(n => n.id !== notifId));
-      }, 5000);
-    } catch (error) {
-      console.error(`Error checking portfolio for ${address}:`, error);
+      // Mettre à jour le composant Portfolio avec les données du dernier fichier wallet
+      // Vérifier si la fonction fetchWalletPortfolio est disponible dans window
+      if (typeof window !== 'undefined') {
+        const customWindow = window as unknown as CustomWindow;
+        if (customWindow.fetchWalletPortfolio) {
+          // Mettre à jour le Portfolio avec l'adresse actuelle
+          customWindow.fetchWalletPortfolio(address);
+          console.log(`Triggered Portfolio update for address: ${address}`);
+        }
+      }
       
-      // Show error notification
+      // Afficher une notification de succès
       const notifId = generateUniqueNotificationId();
       const now = Date.now();
       setNotifications(prev => [...prev, { 
         id: notifId, 
-        content: `Failed to load portfolio: ${error.message}`, 
+        content: `Trouvé ${liveTokens} tokens dans le portefeuille`, 
         author: "Portfolio", 
         timestamp: now 
       }]);
@@ -590,12 +585,22 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
     // Store the prices in the tokenPrices state as well (for backward compatibility)
     setTokenPrices(prev => ({ ...prev, ...newPrices }));
     
+    // Mettre à jour le composant Portfolio avec les données du dernier fichier wallet
+    if (typeof window !== 'undefined') {
+      const customWindow = window as unknown as CustomWindow;
+      if (customWindow.fetchWalletPortfolio) {
+        // Mettre à jour le Portfolio avec l'adresse actuelle
+        customWindow.fetchWalletPortfolio(address);
+        console.log(`Triggered Portfolio update after price refresh for address: ${address}`);
+      }
+    }
+    
     // Notification que le portefeuille a été mis à jour avec succès
     const now = Date.now();
     const walletUpdateNotifId = generateUniqueNotificationId();
     setNotifications(prev => [...prev, { 
       id: walletUpdateNotifId, 
-      content: `Portefeuille mis à jour avec succès`, 
+      content: `Prix du portefeuille mis à jour avec succès`, 
       author: "Wallet", 
       timestamp: now 
     }]);

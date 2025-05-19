@@ -23,30 +23,29 @@ export async function GET(request: NextRequest) {
     
     console.log('All wallet files:', targetFiles);
     
-    // If address is provided, filter files for that specific address
+    // Si une adresse est fournie, filtrer les fichiers pour cette adresse spécifique
     if (address) {
-      // More flexible matching - the address might be part of the filename in various formats
-      targetFiles = targetFiles.filter(file => {
-        // Try different patterns that might include the address
-        return file.includes(address) || 
-               // Check for sanitized versions of the address (some systems replace special chars)
-               file.includes(address.replace(/[^a-zA-Z0-9]/g, '_'));
-      });
-      console.log(`Files for address ${address}:`, targetFiles);
+      // Sanitize l'adresse pour correspondre au format utilisé dans les noms de fichiers
+      const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
       
-      // If no files found for this address, try a more lenient approach
+      // Filtrer les fichiers qui commencent par l'adresse sanitizée et qui contiennent WALLET
+      targetFiles = targetFiles.filter(file => 
+        file.startsWith(sanitizedAddress) && file.includes('_WALLET_')
+      );
+      console.log(`Files for address ${address} (sanitized as ${sanitizedAddress}):`, targetFiles);
+      
+      // Si aucun fichier n'est trouvé pour cette adresse, essayer une approche plus souple
       if (targetFiles.length === 0) {
         console.log('No exact address matches found, trying partial matching');
-        // Try to match just the first part of the address (first 10 chars)
-        const addressPrefix = address.substring(0, 10);
+        // Essayer de faire correspondre juste la première partie de l'adresse (10 premiers caractères)
+        const addressPrefix = sanitizedAddress.substring(0, 10);
         targetFiles = fs.readdirSync(walletsDir)
-          .filter(file => file.endsWith('.json') && file.includes(addressPrefix));
+          .filter(file => file.endsWith('.json') && file.startsWith(addressPrefix));
         console.log(`Files matching address prefix ${addressPrefix}:`, targetFiles);
       }
     } else {
-      // If no address provided, use files with ADDRESS_WALLET pattern
-      targetFiles = targetFiles.filter(file => file.includes('ADDRESS_WALLET'));
-      console.log('Generic wallet files:', targetFiles);
+      // Si aucune adresse n'est fournie, utiliser tous les fichiers JSON
+      console.log('No address provided, using all JSON files');
     }
     
     // If no wallet files found, return empty array
@@ -55,12 +54,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [] });
     }
     
-    // Sort files by date (assuming filename format includes date)
-    // This will get the most recent file based on filename
+    // Trier les fichiers par date en utilisant le timestamp dans le nom de fichier
+    // Format attendu: ADDRESS_WALLET_TIMESTAMP.json
     targetFiles.sort((a, b) => {
-      return b.localeCompare(a); // Descending order
+      // Extraire les timestamps des noms de fichiers
+      const timestampA = a.split('_WALLET_')[1]?.replace('.json', '');
+      const timestampB = b.split('_WALLET_')[1]?.replace('.json', '');
+      
+      if (!timestampA || !timestampB) {
+        return b.localeCompare(a); // Fallback au tri lexicographique si le format ne correspond pas
+      }
+      
+      // Trier par timestamp en ordre décroissant (le plus récent en premier)
+      return parseInt(timestampB) - parseInt(timestampA);
     });
-    console.log('Sorted files:', targetFiles);
+    console.log('Sorted files by timestamp:', targetFiles);
     
     // Get the most recent file
     const latestFile = targetFiles[0];
