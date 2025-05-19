@@ -469,26 +469,40 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
           const checkTransactionFile = async () => {
             try {
               const response = await fetch(`/transactions/${address}.json`, { cache: 'no-store' });
-              
+              console.log(`Checking transaction file for ${address}: response status ${response.status}`);  
               // Si le fichier existe, vérifier la date de dernière récupération
               if (response.ok) {
                 const transactionData = await response.json();
-                const lastFetched = transactionData.lastFetched || 0;
-                const currentTime = Date.now();
-                const twoHoursInMs = 2 * 60 * 60 * 1000; // 2 heures en millisecondes
                 
-                // Si les transactions ont été récupérées il y a moins de 2 heures, ne pas les récupérer à nouveau
-                if (currentTime - lastFetched < twoHoursInMs) {
-                  console.log(`Skipping transaction fetch for ${address}: last fetched ${new Date(lastFetched).toLocaleString()}, less than 2 hours ago`);
-                  return;
+                // Vérifier si lastFetched existe, sinon utiliser lastUpdated
+                let lastFetchedStr = transactionData.lastFetched || transactionData.lastUpdated || null;
+                console.log(`Checking transaction file for ${address}: last fetched ${lastFetchedStr}`);  
+                if (lastFetchedStr) {
+                  // Convertir la date ISO en timestamp
+                  const lastFetchedDate = new Date(lastFetchedStr);
+                  const lastFetchedMs = lastFetchedDate.getTime();
+                  const currentTime = Date.now();
+                  const twoHoursInMs = 2 * 60 * 60 * 1000; // 2 heures en millisecondes
+                  console.log(`Checking transaction file for ${address}: last fetched ${lastFetchedDate.toLocaleString()}, less than 2 hours ago`);
+                  console.log("twoHoursInMs", twoHoursInMs);
+                  console.log("transaction currentTime - lastFetchedMs", currentTime - lastFetchedMs);
+                  console.log("currentTime transaction", currentTime);
+                  console.log("transaction last fetched", lastFetchedMs);
+                  // Si les transactions ont été récupérées il y a moins de 2 heures, ne pas les récupérer à nouveau
+                  if (currentTime - lastFetchedMs < twoHoursInMs) {
+                    console.log(`Skipping transaction fetch for ${address}: last fetched ${lastFetchedDate.toLocaleString()}, less than 2 hours ago`);
+                    return;
+                  }
+                  console.log(`Transaction data exists for ${address} but was fetched more than 2 hours ago (${lastFetchedDate.toLocaleString()}). Fetching again.`);
+                  // Si le fichier n'existe pas ou si les transactions ont été récupérées il y a plus de 2 heures, les récupérer
+                  setTimeout(() => {
+                    (window as any).getWalletTransactions(address);
+                    console.log(`Triggered fetching transaction history again for address: ${address}`);
+                  }, 2000);
                 }
               }
               
-              // Si le fichier n'existe pas ou si les transactions ont été récupérées il y a plus de 2 heures, les récupérer
-              setTimeout(() => {
-                (window as any).getWalletTransactions(address);
-                console.log(`Triggered transaction history fetch for address: ${address}`);
-              }, 2000);
+
             } catch (error) {
               console.error(`Error checking transaction file for ${address}:`, error);
               // En cas d'erreur, récupérer les transactions par défaut
@@ -521,7 +535,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         setTimeout(() => {
           console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
           refreshTokenPrices(address);
-        }, 5000); // 5 secondes de délai
+        }, 25000); // 5 secondes de délai
       }
       
       // Afficher une notification de succès
@@ -823,8 +837,12 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
     // Count non-NFT tokens with prices for the notification
     const tokensWithPrice = Object.entries(newPrices)
       .filter(([mint, price]) => {
-        const token = wallet[address].find(t => t.mint === mint);
-        return price !== null && !token?.tokenIsNFT;
+        console.log(`Checking price for mint: ${mint}, price: ${price}`);
+        if(wallet[address] && price !== null) {
+          const token = wallet[address].find(t => t.mint === mint);
+          return !token?.tokenIsNFT;
+        }
+        return false;
       }).length;
     
     if (tokensWithPrice > 0) {
