@@ -98,8 +98,30 @@ export async function getJupiterPrice(mintAddress: string): Promise<number | nul
         return null;
       }
       
-      // Handle other fetch errors silently
-      console.warn(`Error fetching from Jupiter API for mintAddress: ${mintAddress}`, innerError);
+      // Vérifier spécifiquement les erreurs Axios
+      if (axios.isAxiosError(innerError)) {
+        const statusCode = innerError.response?.status;
+        const errorMessage = innerError.response?.data?.error || innerError.message;
+        
+        console.warn(`Axios error fetching from Jupiter API for mintAddress: ${mintAddress}. Status: ${statusCode || 'unknown'}, Message: ${errorMessage}`);
+        
+        // Gérer différents codes d'erreur
+        if (statusCode !== undefined) {
+          if (statusCode === 429) {
+            console.warn('Rate limit exceeded for Jupiter API');
+          } else if (statusCode >= 500) {
+            console.warn('Jupiter API server error');
+          } else if (statusCode >= 400) {
+            console.warn('Jupiter API client error (bad request or not found)');
+          }
+        } else {
+          console.warn('Jupiter API error with unknown status code');
+        }
+      } else {
+        // Handle other fetch errors silently
+        console.warn(`Error fetching from Jupiter API for mintAddress: ${mintAddress}`, innerError);
+      }
+      
       return null;
     }
   } catch (error) {

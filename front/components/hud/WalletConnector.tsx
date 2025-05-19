@@ -3,6 +3,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { getTokenAccounts, getTokenMetadata } from './utils/TokenUtils';
 import { getBinancePrice, getJupiterPrice, findCoinGeckoId, fetchTokenPrice, fetchCoinGeckoCoins } from './utils/PriceUtils';
 import { sleep, getTokenSymbolReturnSymbol } from './utils/TokenUtils';
+import axios from 'axios';
 
 // Extend the Window interface to include wallet providers
 declare global {
@@ -60,6 +61,23 @@ let notificationIdCounter = 0;
 const generateUniqueNotificationId = (): number => {
   // Utiliser Date.now() comme base et ajouter un compteur incrémentiel
   return Date.now() + (++notificationIdCounter);
+};
+
+// Fonction pour sauvegarder les données du portefeuille dans un fichier
+const saveWalletData = async (address: string, walletData: any) => {
+  try {
+    const response = await axios.post('/api/save-wallet', {
+      address,
+      walletData,
+      date: Date.now().toString()
+    });
+    
+    console.log('Wallet data saved successfully:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error saving wallet data:', error);
+    return null;
+  }
 };
 
 export function WalletConnector({ onAddressesChange, onWalletChange, setNotifications }: WalletConnectorProps) {
@@ -432,8 +450,8 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         return updatedWallet;
       });
       
-      // Rafraîchir les prix des tokens
-      refreshTokenPrices(address);
+      // Ne pas rafraîchir les prix ici, car nous le ferons automatiquement plus tard
+      // refreshTokenPrices(address);
       
       // Mettre à jour le composant Portfolio avec les données du dernier fichier wallet
       // Vérifier si la fonction fetchWalletPortfolio est disponible dans window
@@ -447,12 +465,63 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         
         // Récupérer l'historique des transactions du portefeuille
         if ((window as any).getWalletTransactions) {
-          // Attendre un peu pour ne pas surcharger l'API
-          setTimeout(() => {
-            (window as any).getWalletTransactions(address);
-            console.log(`Triggered transaction history fetch for address: ${address}`);
-          }, 2000);
+          // Vérifier si les transactions existent déjà et si elles ont été récupérées il y a moins de 2 heures
+          const checkTransactionFile = async () => {
+            try {
+              const response = await fetch(`/transactions/${address}.json`, { cache: 'no-store' });
+              
+              // Si le fichier existe, vérifier la date de dernière récupération
+              if (response.ok) {
+                const transactionData = await response.json();
+                const lastFetched = transactionData.lastFetched || 0;
+                const currentTime = Date.now();
+                const twoHoursInMs = 2 * 60 * 60 * 1000; // 2 heures en millisecondes
+                
+                // Si les transactions ont été récupérées il y a moins de 2 heures, ne pas les récupérer à nouveau
+                if (currentTime - lastFetched < twoHoursInMs) {
+                  console.log(`Skipping transaction fetch for ${address}: last fetched ${new Date(lastFetched).toLocaleString()}, less than 2 hours ago`);
+                  return;
+                }
+              }
+              
+              // Si le fichier n'existe pas ou si les transactions ont été récupérées il y a plus de 2 heures, les récupérer
+              setTimeout(() => {
+                (window as any).getWalletTransactions(address);
+                console.log(`Triggered transaction history fetch for address: ${address}`);
+              }, 2000);
+            } catch (error) {
+              console.error(`Error checking transaction file for ${address}:`, error);
+              // En cas d'erreur, récupérer les transactions par défaut
+              setTimeout(() => {
+                (window as any).getWalletTransactions(address);
+                console.log(`Triggered transaction history fetch for address: ${address} (after error)`);
+              }, 2000);
+            }
+          };
+          
+          checkTransactionFile();
         }
+      }
+      
+      // Lancer automatiquement le rafraîchissement des prix après avoir chargé le portefeuille
+      // Attendre un court instant pour s'assurer que le portefeuille est bien chargé
+      const refreshDelay = 2000; // 2 secondes de délai
+      console.log(`Scheduling price refresh for address: ${address} in ${refreshDelay/1000} seconds`);
+      
+      // Vérifier que nous avons des tokens avant de planifier le rafraîchissement
+      if (wallet[address] && wallet[address].length > 0) {
+        console.log(`Found ${wallet[address].length} tokens in wallet, scheduling refresh`);
+        setTimeout(() => {
+          console.log(`Auto-refreshing prices for address: ${address}`);
+          refreshTokenPrices(address);
+        }, refreshDelay);
+      } else {
+        console.log(`No tokens found in wallet yet, using a longer delay for refresh`);
+        // Utiliser un délai plus long si aucun token n'est encore chargé
+        setTimeout(() => {
+          console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
+          refreshTokenPrices(address);
+        }, 5000); // 5 secondes de délai
       }
       
       // Afficher une notification de succès
@@ -474,8 +543,65 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
 
   // Refresh all token prices for a wallet
   const refreshTokenPrices = async (address: string) => {
+    console.log(`Starting price refresh for address: ${address}`);
     setLoadingPrice(prev => ({ ...prev, [address]: true }));
-    const tokens = wallet[address] || [];
+    
+    // S'assurer que nous avons les tokens les plus récents
+    // Utiliser une copie locale du wallet pour éviter les problèmes de timing
+    let tokens = wallet[address] || [];
+    
+    // Si aucun token n'est trouvé, essayer de récupérer les données du portefeuille à nouveau
+    if (tokens.length === 0) {
+      console.log(`No tokens found in wallet state, attempting to reload portfolio for address: ${address}`);
+      try {
+        // Essayer de recharger le portefeuille depuis le serveur
+        const response = await fetch(`/api/portfolio?address=${address}&t=${Date.now()}`);
+        const data = await response.json();
+        
+        if (data && data.data && data.data.length > 0) {
+          console.log(`Successfully loaded ${data.data.length} tokens from API for address: ${address}`);
+          
+          // Convertir les données du portfolio au format attendu par le wallet
+          tokens = data.data.map((item: { 
+            mint: string; 
+            numberCoin: number; 
+            name: string; 
+            symbol: string; 
+            logo: string | null; 
+            price: number | null; 
+            value: number | null; 
+          }) => ({
+            mint: item.mint,
+            balance: item.numberCoin,
+            name: item.name,
+            symbol: item.symbol,
+            logo: item.logo,
+            tokenIsNFT: false,
+            price: item.price || null,
+            valueStableCoin: item.value || null
+          }));
+          
+          // Mettre à jour le wallet avec les données récupérées
+          setWallet(prev => ({
+            ...prev,
+            [address]: tokens
+          }));
+        } else {
+          console.warn(`No tokens found in API response for address: ${address}`);
+        }
+      } catch (error) {
+        console.error(`Error reloading portfolio for address: ${address}:`, error);
+      }
+    }
+    
+    // Vérifier à nouveau si nous avons des tokens
+    if (tokens.length === 0) {
+      console.warn(`No tokens found for address: ${address}, cannot refresh prices`);
+      setLoadingPrice(prev => ({ ...prev, [address]: false }));
+      return;
+    }
+    
+    console.log(`Found ${tokens.length} tokens to refresh prices for`);
     const newPrices: {[mint: string]: number | null} = {};
     
     for (const token of tokens) {
@@ -501,56 +627,84 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       let price = null;
       let priceSource = "";
       
-      // First try to get price from Binance using the token symbol
-      const binancePrice = await getBinancePrice(symbol);
-      if (binancePrice !== null) {
-        price = binancePrice;
-        priceSource = "Binance";
-        console.log(`${symbol.toUpperCase()} Price (USD) from Binance: $${price}`);
-      } else {
-        // Second, try CoinGecko if not available on Binance
-        const coinGeckoId = await findCoinGeckoId(symbol, coinGeckoCoins);
-        if (coinGeckoId) {
-          await sleep(500); // 500ms delay between requests to avoid rate limiting
-          price = await fetchTokenPrice(coinGeckoId, lastCoinGeckoCall, setLastCoinGeckoCall);
-          priceSource = "CoinGecko";
-          console.log(`${symbol.toUpperCase()} Price (USD) from CoinGecko: $${price}`);
+      try {
+        // First try to get price from Binance using the token symbol
+        console.log(`Fetching price for ${symbol} from Binance...`);
+        const binancePrice = await getBinancePrice(symbol);
+        if (binancePrice !== null) {
+          price = binancePrice;
+          priceSource = "Binance";
+          console.log(`${symbol.toUpperCase()} Price (USD) from Binance: $${price}`);
         } else {
-          // Finally, fallback to Jupiter API if not available on Binance or CoinGecko
-          const jupiterPrice = await getJupiterPrice(token.mint);
-          if (jupiterPrice !== null) {
-            price = jupiterPrice;
-            priceSource = "Jupiter";
-            console.log(`${symbol.toUpperCase()} Price (USD) from Jupiter: $${price}`);
+          // Second, try CoinGecko if not available on Binance
+          console.log(`Binance price not found for ${symbol}, trying CoinGecko...`);
+          const coinGeckoId = await findCoinGeckoId(symbol, coinGeckoCoins);
+          if (coinGeckoId) {
+            await sleep(500); // 500ms delay between requests to avoid rate limiting
+            price = await fetchTokenPrice(coinGeckoId, lastCoinGeckoCall, setLastCoinGeckoCall);
+            priceSource = "CoinGecko";
+            console.log(`${symbol.toUpperCase()} Price (USD) from CoinGecko: $${price}`);
           } else {
-            console.log(`No price found for ${symbol} on Binance, CoinGecko or Jupiter`);
+            // Third, try Jupiter if not available on CoinGecko
+            console.log(`CoinGecko price not found for ${symbol}, trying Jupiter...`);
+            try {
+              await sleep(500); // 500ms delay between requests to avoid rate limiting
+              const jupiterPrice = await getJupiterPrice(token.mint);
+              if (jupiterPrice !== null) {
+                price = jupiterPrice;
+                priceSource = "Jupiter";
+                console.log(`${symbol.toUpperCase()} Price (USD) from Jupiter: $${price}`);
+              } else {
+                console.log(`No price found for ${symbol} on Binance, CoinGecko or Jupiter`);
+                priceSource = "NotFound";
+              }
+            } catch (jupiterError) {
+              // En cas d'erreur avec Jupiter API, marquer simplement le prix comme non trouvé
+              console.warn(`Error fetching from Jupiter API for mintAddress: ${token.mint}`, jupiterError);
+              priceSource = "NotFound";
+            }
           }
         }
+      } catch (error) {
+        console.error(`Error fetching price for ${symbol}:`, error);
       }
       
       newPrices[token.mint] = price;
       
       // Update the token in the wallet with its price and symbol
-      const tokenIndex = wallet[address].findIndex(t => t.mint === token.mint);
-      if (tokenIndex !== -1) {
-        setWallet(prev => {
-          const newWallet = { ...prev };
-          // Calculate valueStableCoin (balance * price)
-          const valueStableCoin = price !== null ? token.balance * price : null;
-          const updatedToken = { 
-            ...newWallet[address][tokenIndex], 
-            price, 
-            symbol,
-            priceSource, // Store the source of the price data
-            valueStableCoin // Add the calculated value in USD
-          };
-          newWallet[address] = [
-            ...newWallet[address].slice(0, tokenIndex),
-            updatedToken,
-            ...newWallet[address].slice(tokenIndex + 1)
-          ];
-          return newWallet;
-        });
+      // Vérifier que wallet[address] existe avant d'appeler findIndex
+      if (wallet[address] && Array.isArray(wallet[address])) {
+        const tokenIndex = wallet[address].findIndex(t => t.mint === token.mint);
+        if (tokenIndex !== -1) {
+          setWallet(prev => {
+            const newWallet = { ...prev };
+            // S'assurer que newWallet[address] existe toujours
+            if (!newWallet[address] || !Array.isArray(newWallet[address])) {
+              console.warn(`Address ${address} no longer exists in wallet state during price update`);
+              return prev; // Retourner l'état précédent sans modifications
+            }
+            
+            // Calculate valueStableCoin (balance * price)
+            const valueStableCoin = price !== null ? token.balance * price : null;
+            const updatedToken = { 
+              ...newWallet[address][tokenIndex], 
+              price, 
+              symbol,
+              priceSource, // Store the source of the price data
+              valueStableCoin // Add the calculated value in USD
+            };
+            newWallet[address] = [
+              ...newWallet[address].slice(0, tokenIndex),
+              updatedToken,
+              ...newWallet[address].slice(tokenIndex + 1)
+            ];
+            return newWallet;
+          });
+        } else {
+          console.warn(`Token with mint ${token.mint} not found in wallet for address ${address}`);
+        }
+      } else {
+        console.warn(`No wallet data found for address ${address} when updating token prices`);
       }
       
       await sleep(1000); // 1s delay between requests to avoid rate limiting
@@ -558,24 +712,70 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
     
     // Merge newPrices into wallet for entries with matching address keys
     setWallet(prev => {
+      // Vérifier que prev est un objet valide
+      if (!prev || typeof prev !== 'object') {
+        console.warn('Previous wallet state is invalid, cannot update prices');
+        return prev;
+      }
+      
       const updatedWallet = { ...prev };
       
       // If this address exists in the wallet
-      if (updatedWallet[address]) {
-        // Update each token with its new price data and calculate valueStableCoin
-        updatedWallet[address] = updatedWallet[address].map(token => {
-          if (token.mint in newPrices) {
-            const price = newPrices[token.mint];
-            // Calculate valueStableCoin (balance * price)
-            const valueStableCoin = price !== null ? token.balance * price : null;
-            return {
-              ...token,
-              price,
-              valueStableCoin
-            };
-          }
-          return token;
-        });
+      if (updatedWallet[address] && Array.isArray(updatedWallet[address])) {
+        try {
+          // Update each token with its new price data and calculate valueStableCoin
+          updatedWallet[address] = updatedWallet[address].map(token => {
+            if (token && token.mint && token.mint in newPrices) {
+              const price = newPrices[token.mint];
+              // Calculate valueStableCoin (balance * price)
+              const valueStableCoin = price !== null && token.balance !== undefined ? token.balance * price : null;
+              return {
+                ...token,
+                price,
+                valueStableCoin
+              };
+            }
+            return token;
+          });
+          
+          console.log('Updated wallet with prices:', updatedWallet[address]);
+          
+          // Vérifier si des prix ont été récupérés
+          const tokensWithPrices = updatedWallet[address].filter(token => 
+            token && token.price !== null && token.price !== undefined
+          );
+          console.log(`Found ${tokensWithPrices.length} tokens with prices out of ${updatedWallet[address].length} total tokens`);
+          
+          // Sauvegarder le wallet mis à jour avec les prix et valeurs dans un fichier
+          const walletData = {
+            address: address,
+            lastUpdated: new Date().toISOString(),
+            tokens: updatedWallet[address].map(token => {
+              if (!token) {
+                console.warn('Found null or undefined token in wallet data');
+                return null;
+              }
+              
+              // S'assurer que les prix et valeurs sont correctement formatés
+              const price = token.price !== undefined ? token.price : null;
+              const value = token.valueStableCoin !== undefined ? token.valueStableCoin : null;
+              
+              return {
+                ...token,
+                price,
+                value
+              };
+            }).filter(Boolean) // Filtrer les éléments null
+          };
+          
+          // Appeler l'API pour sauvegarder les données du wallet
+          console.log('Saving wallet data with prices and values:', walletData);
+          saveWalletData(address, walletData);
+        } catch (error) {
+          console.error('Error updating wallet with prices:', error);
+        }
+      } else {
+        console.warn(`No valid wallet data found for address ${address} when updating prices`);
       }
       
       // Afficher les données mises à jour du portefeuille
@@ -595,14 +795,17 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
     setTokenPrices(prev => ({ ...prev, ...newPrices }));
     
     // Mettre à jour le composant Portfolio avec les données du dernier fichier wallet
-    if (typeof window !== 'undefined') {
-      const customWindow = window as unknown as CustomWindow;
-      if (customWindow.fetchWalletPortfolio) {
-        // Mettre à jour le Portfolio avec l'adresse actuelle
-        customWindow.fetchWalletPortfolio(address);
-        console.log(`Triggered Portfolio update after price refresh for address: ${address}`);
+    // Attendre un court instant pour s'assurer que le fichier a été sauvegardé
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        const customWindow = window as unknown as CustomWindow;
+        if (customWindow.fetchWalletPortfolio) {
+          // Mettre à jour le Portfolio avec l'adresse actuelle
+          customWindow.fetchWalletPortfolio(address);
+          console.log(`Triggered Portfolio update after price refresh for address: ${address}`);
+        }
       }
-    }
+    }, 500); // Attendre 500ms pour s'assurer que le fichier a été sauvegardé
     
     // Notification que le portefeuille a été mis à jour avec succès
     const now = Date.now();

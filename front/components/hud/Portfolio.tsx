@@ -14,6 +14,9 @@ type PortfolioItem = {
   totalActualPrice: number;
   totalPrice: number;
   dateImport: string;
+  // Nouvelles propriétés pour le prix et la valeur calculée
+  price?: number | null;
+  value?: number | null;
 };
 
 type NotificationType = {
@@ -51,9 +54,18 @@ export function Portfolio({ isPortfolioBoxExpanded, setIsPortfolioBoxExpanded, s
           ? `/api/portfolio?address=${walletAddress}` 
           : '/api/portfolio';
         
-        console.log(`Fetching portfolio data from: ${url}`);
-        const response = await axios.get(url);
-        setPortfolioData(response.data.data);
+        // Ajouter un timestamp pour éviter le cache du navigateur
+        const urlWithTimestamp = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        
+        console.log(`Fetching portfolio data from: ${urlWithTimestamp}`);
+        const response = await axios.get(urlWithTimestamp);
+        
+        if (response.data && response.data.data) {
+          console.log('Portfolio data received:', response.data.data.length, 'items');
+          setPortfolioData(response.data.data);
+        } else {
+          console.warn('Portfolio data is empty or invalid:', response.data);
+        }
       } catch (error) {
         console.error('Error fetching portfolio data:', error);
         // Set a notification about the error
@@ -119,22 +131,31 @@ export function Portfolio({ isPortfolioBoxExpanded, setIsPortfolioBoxExpanded, s
                   // Calculate profit/loss percentage
                   const plPercentage = ((item.actualPrice - item.averagePrice) / item.averagePrice) * 100;
                   
+                  // Utiliser la valeur calculée si disponible, sinon utiliser totalActualPrice
+                  const displayValue = item.value !== undefined && item.value !== null 
+                    ? item.value 
+                    : item.totalActualPrice;
+                  
                   return (
-                    <tr key={index} className="border-b border-gray-700 border-opacity-30">
-                      <td className="px-1 py-1 flex items-center">
-                        {item.logo ? (
-                          <img src={item.logo} alt={item.symbol} className="w-4 h-4 mr-1 rounded-full" />
-                        ) : (
-                          <div className="w-4 h-4 mr-1 bg-gray-600 rounded-full flex items-center justify-center text-[8px]">
-                            {item.symbol.substring(0, 1)}
-                          </div>
-                        )}
-                        <span>{item.symbol}</span>
+                    <tr key={item._id} className="border-b border-gray-700 border-opacity-50">
+                      <td className="px-1 py-1 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {item.logo && (
+                            <img src={item.logo} alt={item.symbol} className="w-4 h-4 mr-1 rounded-full" />
+                          )}
+                          <span className="font-medium">{item.symbol}</span>
+                        </div>
                       </td>
-                      <td className="px-1 py-1 text-right">{item.numberCoin.toFixed(2)}</td>
-                      <td className="px-1 py-1 text-right">${item.totalActualPrice.toFixed(2)}</td>
-                      <td className={`px-1 py-1 text-right ${plPercentage >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {plPercentage.toFixed(2)}%
+                      <td className="px-1 py-1 text-right">
+                        {item.numberCoin.toFixed(2)}
+                      </td>
+                      <td className="px-1 py-1 text-right">
+                        ${typeof displayValue === 'number' ? displayValue.toFixed(2) : '0.00'}
+                      </td>
+                      <td className="px-1 py-1 text-right">
+                        <span className={plPercentage >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {plPercentage >= 0 ? '+' : ''}{plPercentage.toFixed(2)}%
+                        </span>
                       </td>
                     </tr>
                   );

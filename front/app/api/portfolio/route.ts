@@ -70,59 +70,51 @@ export async function GET(request: NextRequest) {
     });
     console.log('Sorted files by timestamp:', targetFiles);
     
+    // Ajouter un log pour débogage
+    console.log('Using the most recent wallet file for portfolio data');
+    
     // Get the most recent file
     const latestFile = targetFiles[0];
     const filePath = path.join(walletsDir, latestFile);
     console.log('Latest file:', latestFile);
     
-    // Read and parse the JSON file
+    // Read the file content
     const fileContent = fs.readFileSync(filePath, 'utf8');
-    const parsedData = JSON.parse(fileContent);
+    let walletData: { address: string; lastUpdated: string; tokens: any[] } = { address: '', lastUpdated: '', tokens: [] };
     
-    // Check the structure of the parsed data
-    console.log('Parsed data structure:', {
-      isArray: Array.isArray(parsedData),
-      type: typeof parsedData,
-      keys: typeof parsedData === 'object' ? Object.keys(parsedData) : 'not an object'
-    });
-    
-    // Ensure walletData is an array
-    let walletData: any[] = [];
-    
-    if (Array.isArray(parsedData)) {
-      // Data is already an array
-      walletData = parsedData;
-    } else if (typeof parsedData === 'object' && parsedData !== null) {
-      // Data might be an object with tokens as properties or in a nested property
-      if (parsedData.tokens && Array.isArray(parsedData.tokens)) {
-        // If there's a tokens array property
-        walletData = parsedData.tokens;
-      } else if (parsedData.data && Array.isArray(parsedData.data)) {
-        // If there's a data array property
-        walletData = parsedData.data;
+    try {
+      const parsedData = JSON.parse(fileContent);
+      
+      // Check if the data is in the expected format
+      if (parsedData && parsedData.tokens && Array.isArray(parsedData.tokens)) {
+        walletData = parsedData;
+        console.log(`Successfully parsed wallet data with ${walletData.tokens.length} tokens`);
       } else {
-        // Try to convert object to array if it looks like a collection of tokens
-        const possibleTokens = Object.values(parsedData);
-        if (possibleTokens.length > 0 && typeof possibleTokens[0] === 'object') {
-          walletData = possibleTokens;
-        }
+        // Try to extract tokens from the data structure
+        console.warn('Data structure not recognized, attempting to extract tokens');
+        walletData = { address: '', lastUpdated: '', tokens: [] };
       }
+    } catch (parseError) {
+      console.error('Error parsing wallet file:', parseError);
+      return NextResponse.json({ data: [] });
     }
     
-    console.log(`Found ${walletData.length} tokens in wallet data`);
+    console.log(`Found ${walletData.tokens.length} tokens in wallet data`);
     
     // Transform wallet data to portfolio format
     // Using the correct fields from the wallet data
-    const portfolioData = walletData
+    const portfolioData = walletData.tokens
       .filter((token: any) => token && typeof token === 'object' && !token.tokenIsNFT) // Filter out NFTs and ensure valid objects
       .map((token: any, index: number) => {
-        // Use valueStableCoin if available, otherwise calculate based on price
+        // Utiliser la valeur calculée si disponible (price * balance)
         const price = token.price || 0;
-        const totalActualPrice = token.valueStableCoin || (price * token.balance) || 0;
+        const tokenValue = token.value !== undefined && token.value !== null 
+          ? token.value 
+          : (price * token.balance) || 0;
         
         // Use average price if available, otherwise use current price
         const averagePrice = token.averagePrice || price;
-        const totalPrice = averagePrice * token.balance || totalActualPrice;
+        const totalPrice = averagePrice * token.balance || tokenValue;
         
         return {
           _id: (index + 1).toString(),
@@ -134,9 +126,11 @@ export async function GET(request: NextRequest) {
           name: token.name || token.symbol || 'Unknown',
           logo: token.logo || '',
           exchange: token.priceSource ? [token.priceSource.toLowerCase()] : ['unknown'],
-          totalActualPrice: totalActualPrice,
+          totalActualPrice: tokenValue,
           totalPrice: totalPrice,
-          dateImport: new Date().toISOString()
+          dateImport: new Date().toISOString(),
+          price: price,
+          value: tokenValue
         };
       });
     
