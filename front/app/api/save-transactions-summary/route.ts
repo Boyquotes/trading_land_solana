@@ -3,19 +3,31 @@ import path from 'path';
 import { NextResponse } from 'next/server';
 
 /**
- * API route pour sauvegarder les transactions d'un portefeuille
- * POST /api/save-transactions
- * Body: { address: string, pageNumber: number, transactions: any[] }
- * Format du nom de fichier: ADDRESS_TRANSACTIONS_page-X.json
+ * API route pour sauvegarder un résumé des transactions d'un portefeuille
+ * POST /api/save-transactions-summary
+ * Body: { 
+ *   address: string, 
+ *   summary: { 
+ *     lastFetched: string, 
+ *     totalPages: number, 
+ *     totalTransactions: number,
+ *     pages: Array<{ 
+ *       pageNumber: number, 
+ *       filename: string, 
+ *       lastSignature: string, 
+ *       timestamp: number 
+ *     }> 
+ *   }
+ * }
  */
 export async function POST(request: Request) {
   try {
     // Parse the request body
     const data = await request.json();
-    const { address, pageNumber, transactions } = data;
+    const { address, summary } = data;
 
     // Validate required parameters
-    if (!address || pageNumber === undefined || !transactions) {
+    if (!address || !summary) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -28,35 +40,32 @@ export async function POST(request: Request) {
       fs.mkdirSync(transactionsDir, { recursive: true });
     }
 
-    // Create the filename in the format ADDRESS_TRANSACTIONS_page-X.json
-    const filename = `${sanitizedAddress}_TRANSACTIONS_page-${pageNumber}.json`;
+    // Create the filename in the format ADDRESS.json
+    const filename = `${sanitizedAddress}.json`;
     const filePath = path.join(transactionsDir, filename);
 
-    // Prepare metadata to include with the transactions
+    // Add metadata to the summary
     const dataToSave = {
       address,
-      pageNumber,
-      totalTransactions: transactions.length,
-      savedAt: new Date().toISOString(),
-      transactions
+      lastUpdated: new Date().toISOString(),
+      ...summary
     };
 
-    // Write the transactions data to the file
+    // Write the summary data to the file
     fs.writeFileSync(filePath, JSON.stringify(dataToSave, null, 2));
 
     // Return success response
     return NextResponse.json({ 
       success: true, 
       filename,
-      path: `/transactions/${filename}`,
-      totalTransactions: transactions.length
+      path: `/transactions/${filename}`
     });
   } catch (error) {
     // Handle errors
-    console.error('Error saving transactions:', error);
+    console.error('Error saving transactions summary:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
-      error: 'Failed to save transactions', 
+      error: 'Failed to save transactions summary', 
       details: errorMessage 
     }, { status: 500 });
   }
