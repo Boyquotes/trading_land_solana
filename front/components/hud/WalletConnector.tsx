@@ -465,7 +465,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       const now = Date.now();
       setNotifications(prev => [...prev, { 
         id: notifId, 
-        content: `Failed to connect ${walletId} wallet: ${error.message}`, 
+        content: `Failed to connect ${walletId} wallet: ${error instanceof Error ? error.message : String(error)}`, 
         author: "Wallet", 
         timestamp: now 
       }]);
@@ -901,7 +901,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         setTimeout(() => {
           console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
           refreshTokenPrices(address);
-        }, 5000); // 5 secondes de délai
+        }, 25000); // 5 secondes de délai
       }
       
       // Afficher une notification de succès
