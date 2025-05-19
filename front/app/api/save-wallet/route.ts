@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
     // Sanitize the address to create a valid filename
     // Remove any characters that might be invalid in a filename
     const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
-    // Use the provided date for the filename
-    const fileName = `${sanitizedAddress}-${date}.json`;
+    // Use the requested format: ADDRESS_WALLET_date_now.json
+    const fileName = `${sanitizedAddress}_WALLET_${date}.json`;
     
     // Define the directory path and ensure it exists
     const walletsDir = path.join(process.cwd(), 'public', 'wallets');

@@ -232,7 +232,13 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
 
   // Handle click outside wallet dropdown
   const handleClickOutside = (event: MouseEvent) => {
-    if (walletDropdownRef.current && !walletDropdownRef.current.contains(event.target as Node)) {
+    // Vérifier si l'élément cliqué est le bouton de wallet
+    const isWalletButton = (event.target as Element).closest('.wallet-button');
+    
+    // Ne fermer le dropdown que si le clic est à l'extérieur du dropdown ET n'est pas sur le bouton de wallet
+    if (walletDropdownRef.current && 
+        !walletDropdownRef.current.contains(event.target as Node) && 
+        !isWalletButton) {
       setWalletDropdownOpen(false);
     }
   };
@@ -266,6 +272,75 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
     onWalletChange(wallet);
   };
 
+  /**
+   * Sauvegarde les données du portefeuille dans un fichier JSON sur le serveur
+   * @param address Adresse du portefeuille
+   * @param walletData Données du portefeuille à sauvegarder
+   */
+  const saveWalletDataToJson = async (address: string, walletData: TokenInfo[]) => {
+    try {
+      // Créer un objet avec les données du portefeuille et des métadonnées
+      const dataToSave = {
+        address,
+        lastUpdated: new Date().toISOString(),
+        tokens: walletData,
+        totalTokens: walletData.length,
+      };
+      
+      // Générer un timestamp pour le nom du fichier
+      const dateNow = Date.now();
+      
+      // Envoyer les données à l'API pour les sauvegarder dans un fichier
+      const response = await fetch('/api/save-wallet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address,
+          walletData: dataToSave,
+          date: dateNow
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log(`Wallet data for ${address} saved to ${result.path}`);
+        
+        // Notification de sauvegarde réussie
+        const notifId = generateUniqueNotificationId();
+        const now = Date.now();
+        setNotifications(prev => [...prev, { 
+          id: notifId, 
+          content: `Données du portefeuille sauvegardées dans ${result.path}`, 
+          author: "Wallet", 
+          timestamp: now 
+        }]);
+        setTimeout(() => {
+          setNotifications(prev => prev.filter(n => n.id !== notifId));
+        }, 5000);
+      } else {
+        throw new Error(result.error || 'Failed to save wallet data');
+      }
+    } catch (error) {
+      console.error(`Error saving wallet data for ${address}:`, error);
+      
+      // Notification d'erreur
+      const errorNotifId = generateUniqueNotificationId();
+      const errorNow = Date.now();
+      setNotifications(prev => [...prev, { 
+        id: errorNotifId, 
+        content: `Erreur lors de la sauvegarde des données: ${error instanceof Error ? error.message : 'Erreur inconnue'}`, 
+        author: "Wallet", 
+        timestamp: errorNow 
+      }]);
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== errorNotifId));
+      }, 5000);
+    }
+  };
+  
   // Check portfolio for a single address
   const checkPortfolioForAddress = async (address: string) => {
     try {
@@ -282,7 +357,9 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       
       // Process each token account
       let liveTokens = 0;
+      let stop = 2;
       for (const token of tokenAccounts) {
+        if (stop-- <= 0) break;
         // Skip tokens with zero balance
         if (token.balance <= 0) continue;
         
@@ -318,6 +395,8 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
                 ...metadata,
                 tokenIsNFT
               });
+              console.log("New wallet data for", address, newWallet[address]);
+              console.log("New wallet data for", address, wallet);
               return newWallet;
             });
           } catch (error) {
@@ -329,14 +408,33 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         await sleep(100);
       }
       
-      // Update live token count
+      // Mise à jour du nombre de tokens actifs
       setLiveTokenCount(prev => ({ ...prev, [address]: liveTokens }));
       
-      // Refresh token prices
-      refreshTokenPrices(address);
+      // Mettre à jour le portefeuille et sauvegarder les données dans un même callback
+      // pour s'assurer que nous utilisons les données les plus récentes
+      setWallet(prev => {
+        const updatedWallet = { ...prev };
+        
+        // S'assurer que l'adresse existe dans le portefeuille
+        if (updatedWallet[address] && updatedWallet[address].length > 0) {
+          console.log("Wallet data inside setState callback:", updatedWallet[address]);
+          
+          // Sauvegarder les données du portefeuille dans un fichier JSON
+          // en utilisant les données mises à jour
+          saveWalletDataToJson(address, updatedWallet[address])
+            .catch(error => console.error(`Error saving wallet data for ${address}:`, error));
+        }
+        
+        // Mettre à jour le composant parent avec le nouvel état du portefeuille
+        onWalletChange(updatedWallet);
+        
+        return updatedWallet;
+      });
       
-      // Update the parent component with the new wallet state
-      onWalletChange(wallet);
+      // Rafraîchir les prix des tokens
+      // Note: Cette fonction doit être appelée après la mise à jour du portefeuille
+      refreshTokenPrices(address);
       
       // Show notification
       const notifId = generateUniqueNotificationId();
@@ -475,12 +573,19 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
           return token;
         });
       }
-      console.log("Updated wallet:", updatedWallet);
+      
+      // Afficher les données mises à jour du portefeuille
+      console.log("Updated wallet inside setState callback:", updatedWallet[address]);
+      
+      // Mettre à jour le composant parent avec le nouvel état du portefeuille
+      // Utiliser updatedWallet au lieu de wallet pour avoir les données à jour
+      onWalletChange(updatedWallet);
+      
       return updatedWallet;
     });
     
-    // Update the parent component with the new wallet state
-    onWalletChange(wallet);
+    // Ce log affichera l'ancienne valeur de wallet car setWallet est asynchrone
+    console.log("Updated wallet (old value due to async setState):", wallet);
     
     // Store the prices in the tokenPrices state as well (for backward compatibility)
     setTokenPrices(prev => ({ ...prev, ...newPrices }));

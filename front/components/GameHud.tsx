@@ -20,7 +20,8 @@ import {
   AudioControls,
   ChatBox,
   WalletConnector,
-  WalletDropdown
+  WalletDropdown,
+  RecentTrades
 } from './hud'
 
 export interface GameHudProps {
@@ -40,7 +41,6 @@ export default function GameHud({
   // State for UI components
   const [isPricesBoxExpanded, setIsPricesBoxExpanded] = useState<boolean>(false);
   const [isTradesBoxExpanded, setIsTradesBoxExpanded] = useState<boolean>(false);
-  const [isDriftTradesVisible, setIsDriftTradesVisible] = useState<boolean>(true);
   const [isPortfolioBoxExpanded, setIsPortfolioBoxExpanded] = useState<boolean>(false);
   
   // State for notifications
@@ -144,8 +144,13 @@ export default function GameHud({
       <div className="absolute top-4 right-4 pointer-events-auto">
         <div className="relative">
           <button
-            onClick={() => setWalletDropdownOpen(!walletDropdownOpen)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg transition-colors flex items-center space-x-2"
+            onClick={() => {
+              // Utiliser la fonction setWalletDropdownOpen fournie par WalletConnector
+              // pour basculer correctement l'état du dropdown
+              // Inverser explicitement l'état actuel pour s'assurer que le basculement fonctionne correctement
+              setWalletDropdownOpen((prevState) => !prevState);
+            }}
+            className="wallet-button bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg transition-colors flex items-center space-x-2"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -210,50 +215,10 @@ export default function GameHud({
       </div>
 
       {/* Bottom left - Trades Box (positioned below Prices Box) */}
-      <div className="fixed bottom-4 left-4 transform translate-y-20 pointer-events-auto">
-        <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20 max-w-xs transition-all duration-300 ease-in-out">
-          <p 
-            className="text-sm font-bold cursor-pointer flex items-center justify-between"
-            onClick={() => setIsTradesBoxExpanded(!isTradesBoxExpanded)}
-          >
-            Recent Trades
-            <span className={`transition-transform duration-300 ${isTradesBoxExpanded ? 'rotate-180' : ''}`}>
-              ▼
-            </span>
-          </p>
-          
-          {isTradesBoxExpanded && (
-            <div className="mt-2">
-              <div className="flex space-x-2 mb-2">
-                <button 
-                  className={`text-xs px-2 py-1 rounded-full ${isDriftTradesVisible ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  onClick={() => setIsDriftTradesVisible(true)}
-                >
-                  Drift
-                </button>
-                <button 
-                  className={`text-xs px-2 py-1 rounded-full ${!isDriftTradesVisible ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  onClick={() => setIsDriftTradesVisible(false)}
-                >
-                  Jupiter
-                </button>
-              </div>
-              
-              <div className="max-h-40 overflow-y-auto custom-scrollbar">
-                {isDriftTradesVisible ? (
-                  <div className="text-center py-2 text-gray-400 text-xs">
-                    Drift trades will appear here
-                  </div>
-                ) : (
-                  <div className="text-center py-2 text-gray-400 text-xs">
-                    Jupiter trades will appear here
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <RecentTrades 
+        isTradesBoxExpanded={isTradesBoxExpanded}
+        setIsTradesBoxExpanded={setIsTradesBoxExpanded}
+      />
 
       {/* Bottom left - Portfolio Box (positioned below Trades Box) */}
       <div className="fixed bottom-4 left-4 transform translate-y-40 pointer-events-auto">

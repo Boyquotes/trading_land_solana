@@ -6,3 +6,4 @@ export { AudioControls } from './AudioControls';
 export { ChatBox } from './ChatBox';
 export { WalletConnector } from './WalletConnector';
 export { WalletDropdown } from './WalletDropdown';
+export { RecentTrades } from './RecentTrades';
