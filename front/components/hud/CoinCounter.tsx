@@ -14,14 +14,13 @@ export function CoinCounter({ gameInstance }: CoinCounterProps) {
       return;
     }
 
-    // Create a custom message handler for coin collection messages
-    const handleCoinCollectionMessage = (message: any) => {
-      try {
+    // Register a custom message handler with the WebSocketManager
+    // This is a more reliable approach than trying to intercept raw WebSocket messages
+    const customMessageHandler = (message: any) => {
+      // Check if this is a regular message (not a binary message)
+      if (message && typeof message === 'object' && message.t === 9) {
         // Check if this is a coin collection message
-        if (message.t === 9 && // SerializedComponentType.MESSAGE
-            message.content === 'COIN_COLLECTED' && 
-            message.sender === 'SYSTEM') {
-          
+        if (message.content === 'COIN_COLLECTED' && message.sender === 'SYSTEM') {
           // Increment the coin count
           setCoinCount(prevCount => {
             const newCount = prevCount + 1;
@@ -29,30 +28,11 @@ export function CoinCounter({ gameInstance }: CoinCounterProps) {
             return newCount;
           });
         }
-      } catch (error) {
-        // Ignore parsing errors
       }
     };
 
-    // Create a direct event listener for the WebSocket
-    const messageHandler = (event: MessageEvent) => {
-      try {
-        // Try to parse the message data
-        const data = JSON.parse(event.data);
-        handleCoinCollectionMessage(data);
-      } catch (error) {
-        // Ignore parsing errors for binary data
-      }
-    };
-
-    // Add a direct event listener to the WebSocket
-    if (gameInstance.websocketManager.websocket) {
-      console.log('[CoinCounter] Adding direct WebSocket message listener');
-      gameInstance.websocketManager.websocket.addEventListener('message', messageHandler);
-    }
-
-    // Also create a global function to increment the counter directly
-    // This provides a fallback method for incrementing the counter
+    // Create a global function to handle coin collection
+    // This will be called directly from the CoinCubeComponent
     if (typeof window !== 'undefined') {
       (window as any).incrementCoinCount = () => {
         setCoinCount(prevCount => {
@@ -63,15 +43,25 @@ export function CoinCounter({ gameInstance }: CoinCounterProps) {
       };
     }
 
+    // Add a custom event listener for coin collection
+    // This provides a more reliable way to communicate between components
+    const coinCollectedEventHandler = () => {
+      setCoinCount(prevCount => {
+        const newCount = prevCount + 1;
+        console.log('[CoinCounter] Coin collected via custom event! New count:', newCount);
+        return newCount;
+      });
+    };
+
+    // Create and register the custom event
+    document.addEventListener('coinCollected', coinCollectedEventHandler);
+
     // Clean up when the component unmounts
     return () => {
-      if (gameInstance.websocketManager.websocket) {
-        gameInstance.websocketManager.websocket.removeEventListener('message', messageHandler);
-      }
-      
       if (typeof window !== 'undefined') {
         delete (window as any).incrementCoinCount;
       }
+      document.removeEventListener('coinCollected', coinCollectedEventHandler);
     };
   }, [gameInstance]);
 
