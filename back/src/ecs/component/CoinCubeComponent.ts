@@ -7,6 +7,7 @@ import { EntityDestroyedEvent } from '../../../../shared/component/events/Entity
 import { CoinCollectionComponent } from '../../../../shared/component/CoinCollectionComponent.js'
 import { WebSocketComponent } from './WebsocketComponent.js'
 import { SerializedMessageType } from '../../../../shared/network/server/serialized.js'
+import { SerializedComponentType } from '../../../../shared/network/server/serialized.js'
 
 /**
  * Component that identifies an entity as a coin cube.
@@ -27,6 +28,38 @@ export class CoinCubeComponent extends Component {
     this.mintAddress = mintAddress
   }
 
+  /**
+   * Broadcasts the entity destruction event to all connected clients.
+   * This ensures the coin cube is removed from all players' views.
+   */
+  private broadcastEntityDestruction(): void {
+    try {
+      // Get all player entities to broadcast to
+      const allEntities = EntityManager.getInstance().getAllEntities();
+      const playerEntities = allEntities.filter(entity => entity.getComponent(PlayerComponent) !== undefined);
+      
+      // Create the entity destruction message
+      const destroyMessage = {
+        t: SerializedComponentType.ENTITY_DESTROYED_EVENT, // 5
+        id: this.entityId
+      };
+      
+      // Send the message to all players
+      let broadcastCount = 0;
+      for (const playerEntity of playerEntities) {
+        const websocketComponent = playerEntity.getComponent(WebSocketComponent);
+        if (websocketComponent && websocketComponent.ws) {
+          websocketComponent.ws.send(JSON.stringify(destroyMessage));
+          broadcastCount++;
+        }
+      }
+      
+      console.log(`[CoinCube] Broadcasted entity destruction to ${broadcastCount} clients`);
+    } catch (error) {
+      console.error('[CoinCube] Failed to broadcast entity destruction:', error);
+    }
+  }
+  
   /**
    * Called when a player collides with this coin cube.
    * Destroys the coin cube and increments the player's coin collection count.
@@ -54,7 +87,7 @@ export class CoinCubeComponent extends Component {
     // Log the collection
     console.log(`[CoinCube] Player ${playerEntity.id} collected coin ${this.symbol || 'Unknown'} (${this.mintAddress || 'No mint'}). Total coins: ${totalCoins}`);
     
-    // Send a message to the client to increment the coin counter in the UI
+    // Send a message to the collecting player to increment their coin counter
     try {
       // Get the player's WebSocket component
       const websocketComponent = playerEntity.getComponent(WebSocketComponent);
@@ -77,22 +110,19 @@ export class CoinCubeComponent extends Component {
           }
         };
         
-        // Send the message to the client
+        // Send the message to the collecting player
         // Use the raw WebSocket.send method with a string payload
         // This avoids issues with binary message formats
         websocketComponent.ws.send(JSON.stringify(coinCollectionMessage));
-        console.log('[CoinCube] Sent coin collection message to client');
-        
-        // Also send a direct entity destruction message to ensure it's removed on the client
-        const destroyMessage = {
-          t: 5, // SerializedComponentType.ENTITY_DESTROYED_EVENT
-          id: this.entityId
-        };
-        websocketComponent.ws.send(JSON.stringify(destroyMessage));
-        console.log('[CoinCube] Sent direct entity destruction message to client');
+        console.log('[CoinCube] Sent coin collection message to collecting player');
       } else {
         console.warn('[CoinCube] Player WebSocket component not found');
       }
+      
+      // Broadcast the entity destruction to ALL connected clients
+      // This ensures the coin is removed from everyone's view
+      this.broadcastEntityDestruction();
+      
     } catch (error) {
       console.error('[CoinCube] Failed to send coin counter update:', error);
     }

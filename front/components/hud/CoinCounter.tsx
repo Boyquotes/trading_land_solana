@@ -14,53 +14,24 @@ export function CoinCounter({ gameInstance }: CoinCounterProps) {
       return;
     }
 
-    // Register a custom message handler with the WebSocketManager
-    // This is a more reliable approach than trying to intercept raw WebSocket messages
-    const customMessageHandler = (message: any) => {
-      // Check if this is a regular message (not a binary message)
-      if (message && typeof message === 'object' && message.t === 9) {
-        // Check if this is a coin collection message
-        if (message.content === 'COIN_COLLECTED' && message.sender === 'SYSTEM') {
-          // Increment the coin count
-          setCoinCount(prevCount => {
-            const newCount = prevCount + 1;
-            console.log('[CoinCounter] Coin collected! New count:', newCount);
-            return newCount;
-          });
-        }
-      }
-    };
-
-    // Create a global function to handle coin collection
-    // This will be called directly from the CoinCubeComponent
-    if (typeof window !== 'undefined') {
-      (window as any).incrementCoinCount = () => {
-        setCoinCount(prevCount => {
-          const newCount = prevCount + 1;
-          console.log('[CoinCounter] Coin collected via global function! New count:', newCount);
-          return newCount;
-        });
-      };
-    }
-
     // Add a custom event listener for coin collection
-    // This provides a more reliable way to communicate between components
-    const coinCollectedEventHandler = () => {
+    // This is the only way we'll update the counter to prevent double counting
+    const coinCollectedEventHandler = (event: Event) => {
+      // Safely increment the coin count
       setCoinCount(prevCount => {
         const newCount = prevCount + 1;
-        console.log('[CoinCounter] Coin collected via custom event! New count:', newCount);
+        console.log('[CoinCounter] Coin collected! New count:', newCount);
         return newCount;
       });
     };
 
-    // Create and register the custom event
+    // Register the event listener
+    console.log('[CoinCounter] Adding coinCollected event listener');
     document.addEventListener('coinCollected', coinCollectedEventHandler);
 
     // Clean up when the component unmounts
     return () => {
-      if (typeof window !== 'undefined') {
-        delete (window as any).incrementCoinCount;
-      }
+      console.log('[CoinCounter] Removing coinCollected event listener');
       document.removeEventListener('coinCollected', coinCollectedEventHandler);
     };
   }, [gameInstance]);

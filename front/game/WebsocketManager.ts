@@ -34,9 +34,11 @@ export class WebSocketManager {
   private websocket: WebSocket | null = null
   private messageHandlers: Map<ServerMessageType, MessageHandler> = new Map()
   private serverUrl: string
+  private game: Game
 
   timeSinceLastServerUpdate: number = 0
   constructor(game: Game, port: number = 8001) {
+    this.game = game
     // Set the serverUrl based on the environment
     const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL ?? 'ws://localhost'
     console.log("baseUrl")
@@ -161,21 +163,32 @@ export class WebSocketManager {
               const coinMessage = parsedMessage as CoinCollectionMessage;
               
               if (coinMessage.t === 9 && coinMessage.content === 'COIN_COLLECTED' && coinMessage.sender === 'SYSTEM') {
-                console.log('[WebSocketManager] Dispatching coinCollected event');
-                document.dispatchEvent(new CustomEvent('coinCollected', { detail: coinMessage }));
+                console.log('[WebSocketManager] Received coin collection message');
                 
-                // Also call the global function if it exists
-                if (typeof window !== 'undefined' && (window as any).incrementCoinCount) {
-                  (window as any).incrementCoinCount();
-                }
+                // Only dispatch the event - don't call incrementCoinCount directly
+                // This prevents double counting
+                document.dispatchEvent(new CustomEvent('coinCollected', { detail: coinMessage }));
                 
                 // Check if we need to destroy an entity
                 if (coinMessage.data && coinMessage.data.entityToDestroy) {
                   console.log('[WebSocketManager] Destroying entity from coin collection message:', coinMessage.data.entityToDestroy);
                   
-                  // Create and dispatch an EntityDestroyedEvent
-                  const destroyEvent = new EntityDestroyedEvent(coinMessage.data.entityToDestroy as number);
-                  EventSystem.addEvent(destroyEvent);
+                  try {
+                    // Check if the entity exists before trying to destroy it
+                    // This prevents errors from trying to destroy the same entity twice
+                    const entities = this.game.entityManager.getInstance().getAllEntities();
+                    const entityExists = entities.some((entity: { id: number }) => entity.id === coinMessage.data?.entityToDestroy);
+                    
+                    if (entityExists) {
+                      // Create and dispatch an EntityDestroyedEvent
+                      const destroyEvent = new EntityDestroyedEvent(coinMessage.data.entityToDestroy as number);
+                      EventSystem.addEvent(destroyEvent);
+                    } else {
+                      console.log('[WebSocketManager] Entity already destroyed or not found:', coinMessage.data.entityToDestroy);
+                    }
+                  } catch (error) {
+                    console.error('[WebSocketManager] Error checking entity existence:', error);
+                  }
                 }
                 
                 // Return early as we've handled this message
