@@ -22,7 +22,8 @@ import {
   WalletConnector,
   WalletDropdown,
   RecentTrades,
-  WalletTransactions
+  WalletTransactions,
+  CoinCounter
 } from './hud'
 
 export interface GameHudProps {
@@ -241,6 +242,13 @@ export default function GameHud({
       </div>
       */}
       
+      {/* Coin Counter - Positioned at the top center */}
+      {gameInstance && (
+        <CoinCounter 
+          gameInstance={gameInstance} 
+        />
+      )}
+
       {/* Invisible component for wallet transactions */}
       <WalletTransactions
         address={addresses[0]}
