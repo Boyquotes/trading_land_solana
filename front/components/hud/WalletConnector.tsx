@@ -376,7 +376,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       
       // Process each token account
       let liveTokens = 0;
-      let stop = 6;
+      let stop = 200;
       for (const token of tokenAccounts) {
         if (stop-- <= 0) break;
         // Skip tokens with zero balance

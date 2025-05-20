@@ -169,6 +169,9 @@ export class WebSocketManager {
                 // This prevents double counting
                 document.dispatchEvent(new CustomEvent('coinCollected', { detail: coinMessage }));
                 
+                // Play coin collection sound
+                this.game.audioManager.playSound('/audio/gling_gling_coin.wav', 0.5);
+                
                 // Check if we need to destroy an entity
                 if (coinMessage.data && coinMessage.data.entityToDestroy) {
                   console.log('[WebSocketManager] Destroying entity from coin collection message:', coinMessage.data.entityToDestroy);
