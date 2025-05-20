@@ -110,13 +110,18 @@ const checkForRecentWalletCache = async (address: string, hour: number) => {
       console.log(`No cached wallet files found for ${address}`);
       return null;
     }
-    
-    // Sort by timestamp (newest first)
-    walletFiles.sort((a: string, b: string) => {
-      const timestampA = parseInt(a.split('_WALLET_')[1].replace('.json', '')) || 0;
-      const timestampB = parseInt(b.split('_WALLET_')[1].replace('.json', '')) || 0;
-      return timestampB - timestampA;
-    });
+    console.log("walletFiles", walletFiles);
+    // Sort by timestamp (newest first) only if there are more than 2 files
+    if (walletFiles.length > 2) {
+      console.log(`Found ${walletFiles.length} wallet files, sorting by timestamp`);
+      walletFiles.sort((a: string, b: string) => {
+        const timestampA = parseInt(a.split('_WALLET_')[1].replace('.json', '')) || 0;
+        const timestampB = parseInt(b.split('_WALLET_')[1].replace('.json', '')) || 0;
+        return timestampB - timestampA;
+      });
+    } else {
+      console.log(`Only ${walletFiles.length} wallet files found, no need to sort`);
+    }
     
     const mostRecentFile = walletFiles[0];
     const timestamp = parseInt(mostRecentFile.split('_WALLET_')[1].replace('.json', '')) || 0;
@@ -135,6 +140,70 @@ const checkForRecentWalletCache = async (address: string, hour: number) => {
     }
   } catch (error) {
     console.error('Error checking for wallet cache:', error);
+    return null;
+  }
+};
+
+/**
+ * Check if there's a recent prices cache file (less than specified hours old)
+ * @param address Wallet address to check for
+ * @param hour Number of hours to consider the cache valid
+ * @returns The cached prices data if found and recent, null otherwise
+ */
+const checkForRecentPricesCache = async (address: string, hour: number) => {
+  try {
+    // Get list of files in the wallets directory
+    const response = await axios.get('/api/list-wallets');
+    
+    if (!response.data.success) {
+      console.error('Failed to list wallet files:', response.data.error);
+      return null;
+    }
+    
+    const files = response.data.files;
+    const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // Find the most recent prices file for this address
+    const pricesFiles = files.filter((file: string) => 
+      file.startsWith(sanitizedAddress) && file.includes('_PRICES_')
+    );
+    
+    if (pricesFiles.length === 0) {
+      console.log(`No cached prices files found for ${address}`);
+      return null;
+    }
+    console.log("pricesFiles", pricesFiles);
+    
+    // Sort by timestamp (newest first) only if there are more than 2 files
+    if (pricesFiles.length > 2) {
+      console.log(`Found ${pricesFiles.length} prices files, sorting by timestamp`);
+      pricesFiles.sort((a: string, b: string) => {
+        const timestampA = parseInt(a.split('_PRICES_')[1].replace('.json', '')) || 0;
+        const timestampB = parseInt(b.split('_PRICES_')[1].replace('.json', '')) || 0;
+        return timestampB - timestampA;
+      });
+    } else {
+      console.log(`Only ${pricesFiles.length} prices files found, no need to sort`);
+    }
+    
+    const mostRecentFile = pricesFiles[0];
+    const timestamp = parseInt(mostRecentFile.split('_PRICES_')[1].replace('.json', '')) || 0;
+    
+    // Check if the file is less than specified hours old
+    const hoursInMs = hour * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    if (now - timestamp < hoursInMs) {
+      // File is recent, load it
+      const fileResponse = await axios.get(`/wallets/${mostRecentFile}`);
+      console.log(`Loaded cached prices from ${mostRecentFile}`);
+      return fileResponse.data;
+    } else {
+      console.log(`Cached prices file for ${address} is more than ${hour} hours old`);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error checking for prices cache:', error);
     return null;
   }
 };
@@ -167,13 +236,18 @@ const checkForRecentTokenAccountsCache = async (address: string, hour: number) =
       console.log(`No cached token accounts files found for ${address}`);
       return null;
     }
-    
-    // Sort by timestamp (newest first)
-    tokenAccountsFiles.sort((a: string, b: string) => {
-      const timestampA = parseInt(a.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
-      const timestampB = parseInt(b.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
-      return timestampB - timestampA;
-    });
+    console.log("tokenAccountsFiles", tokenAccountsFiles);
+    // Sort by timestamp (newest first) only if there are more than 2 files
+    if (tokenAccountsFiles.length > 2) {
+      console.log(`Found ${tokenAccountsFiles.length} token accounts files, sorting by timestamp`);
+      tokenAccountsFiles.sort((a: string, b: string) => {
+        const timestampA = parseInt(a.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
+        const timestampB = parseInt(b.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
+        return timestampB - timestampA;
+      });
+    } else {
+      console.log(`Only ${tokenAccountsFiles.length} token accounts files found, no need to sort`);
+    }
     
     const mostRecentFile = tokenAccountsFiles[0];
     const timestamp = parseInt(mostRecentFile.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
@@ -519,6 +593,12 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       
       // Check if we have a recent cached wallet data file (less than 1 hour old)
       const cachedData = await checkForRecentWalletCache(address, 1);
+      console.log("cachedData", cachedData);
+      const cachedTokenAccounts = await checkForRecentTokenAccountsCache(address, 1);
+      console.log("cachedTokenAccounts", cachedTokenAccounts);
+      // const cachedPrices = await checkForRecentPricesCache(address, 1);
+      // console.log("cachedPrices", cachedPrices);
+      
       
       // Initialize wallet data for this address if it doesn't exist
       if (!wallet[address]) {
@@ -527,7 +607,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       
       // If we have recent cached data, use it instead of fetching token accounts
       let tokenAccounts: { mint: string; balance: number }[] = [];
-      if (cachedData) {
+      if (cachedData && cachedTokenAccounts) {
         console.log(`Using cached wallet data for ${address} (less than 1 hour old)`);
         // Use the cached token data
         if (cachedData.tokens && Array.isArray(cachedData.tokens)) {
@@ -538,8 +618,27 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
             return newWallet;
           });
           
-          // Skip token account fetching
-          tokenAccounts = [];
+          tokenAccounts = cachedTokenAccounts;
+          
+          // Mettre à jour le composant Portfolio avec les données du cache
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              const customWindow = window as unknown as CustomWindow;
+              if (customWindow.fetchWalletPortfolio) {
+                // Mettre à jour le Portfolio avec l'adresse actuelle
+                customWindow.fetchWalletPortfolio(address);
+                console.log(`Triggered Portfolio update after loading cached data for address: ${address}`);
+                
+                // Forcer un second rafraîchissement après un court délai pour s'assurer que les données sont bien chargées
+                setTimeout(() => {
+                  if (customWindow.fetchWalletPortfolio) {
+                    customWindow.fetchWalletPortfolio(address);
+                    console.log(`Triggered second Portfolio update to ensure data is loaded for address: ${address}`);
+                  }
+                }, 1000);
+              }
+            }
+          }, 500);
         } else {
           // Check for cached token accounts (less than 4 hours old)
           const cachedTokenAccounts = await checkForRecentTokenAccountsCache(address, 4);
@@ -594,7 +693,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       // Process each token account
       let liveTokens = 0;
       let stop = 200;
-      
+      console.log("tokenAccounts : ", tokenAccounts);
       // If we're using cached token accounts and already counted live tokens, skip processing
       const skipTokenProcessing = tokenAccounts.length === 0;
       
@@ -726,6 +825,17 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
             try {
               const response = await fetch(`/transactions/${address}.json`, { cache: 'no-store' });
               console.log(`Checking transaction file for ${address}: response status ${response.status}`);  
+              
+              // Si le fichier n'existe pas (404), récupérer les transactions
+              if (response.status === 404) {
+                console.log(`Transaction file not found for ${address} (404). Fetching transactions...`);
+                setTimeout(() => {
+                  (window as any).getWalletTransactions(address);
+                  console.log(`Triggered transaction history fetch for address: ${address} (file not found)`);
+                }, 2000);
+                return;
+              }
+              
               // Si le fichier existe, vérifier la date de dernière récupération
               if (response.ok) {
                 const transactionData = await response.json();
@@ -773,26 +883,24 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         }
       }
       
-      if (!cachedData) {
-        // Lancer automatiquement le rafraîchissement des prix après avoir chargé le portefeuille
-        // Attendre un court instant pour s'assurer que le portefeuille est bien chargé
-        const refreshDelay = 2000; // 2 secondes de délai
-        console.log(`Scheduling price refresh for address: ${address} in ${refreshDelay/1000} seconds`);
-        // Vérifier que nous avons des tokens avant de planifier le rafraîchissement
-        if (wallet[address] && wallet[address].length > 0) {
-          console.log(`Found ${wallet[address].length} tokens in wallet, scheduling refresh`);
-          setTimeout(() => {
-            console.log(`Auto-refreshing prices for address: ${address}`);
-            refreshTokenPrices(address);
-          }, refreshDelay);
-        } else {
-          console.log(`No tokens found in wallet yet, using a longer delay for refresh`);
-          // Utiliser un délai plus long si aucun token n'est encore chargé
-          setTimeout(() => {
-            console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
-            refreshTokenPrices(address);
-          }, 25000); // 5 secondes de délai
-        }
+      // Lancer automatiquement le rafraîchissement des prix après avoir chargé le portefeuille
+      // Attendre un court instant pour s'assurer que le portefeuille est bien chargé
+      const refreshDelay = 2000; // 2 secondes de délai
+      console.log(`Scheduling price refresh for address: ${address} in ${refreshDelay/1000} seconds`);
+      // Vérifier que nous avons des tokens avant de planifier le rafraîchissement
+      if (wallet[address] && wallet[address].length > 0) {
+        console.log(`Found ${wallet[address].length} tokens in wallet, scheduling refresh`);
+        setTimeout(() => {
+          console.log(`Auto-refreshing prices for address: ${address}`);
+          refreshTokenPrices(address);
+        }, refreshDelay);
+      } else {
+        console.log(`No tokens found in wallet yet, using a longer delay for refresh`);
+        // Utiliser un délai plus long si aucun token n'est encore chargé
+        setTimeout(() => {
+          console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
+          refreshTokenPrices(address);
+        }, 5000); // 5 secondes de délai
       }
       
       // Afficher une notification de succès
@@ -831,6 +939,67 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
   const refreshTokenPrices = async (address: string) => {
     console.log(`Starting price refresh for address: ${address}`);
     setLoadingPrice(prev => ({ ...prev, [address]: true }));
+    
+    // Vérifier si nous avons des données de prix récentes en cache (moins d'1 heure)
+    const cachedPrices = await checkForRecentPricesCache(address, 1);
+    console.log("cachedPrices", cachedPrices);
+    
+    if (cachedPrices) {
+      console.log(`Found recent cached prices for ${address}, using cached data`);
+      
+      // Mettre à jour le wallet avec les données récupérées du cache
+      setWallet(prev => ({
+        ...prev,
+        [address]: cachedPrices.tokens || []
+      }));
+      
+      // Mettre à jour le composant parent
+      onWalletChange({
+        ...wallet,
+        [address]: cachedPrices.tokens || []
+      });
+      
+      // Notification que les prix ont été chargés depuis le cache
+      const walletUpdateNotifId = generateUniqueNotificationId();
+      const now = Date.now();
+      setNotifications(prev => [...prev, { 
+        id: walletUpdateNotifId, 
+        content: `Prix chargés depuis le cache`, 
+        author: "Wallet", 
+        timestamp: now
+      }]);
+      
+      // Supprimer la notification après 3 secondes
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== walletUpdateNotifId));
+      }, 3000);
+      
+      // Mettre à jour le composant Portfolio avec les données du cache
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          const customWindow = window as unknown as CustomWindow;
+          if (customWindow.fetchWalletPortfolio) {
+            // Force un rafraîchissement complet en ajoutant un timestamp unique
+            customWindow.fetchWalletPortfolio(address);
+            console.log(`Triggered Portfolio update after loading cached prices for address: ${address}`);
+            
+            // Forcer un second rafraîchissement après un court délai pour s'assurer que les données sont bien chargées
+            setTimeout(() => {
+              if (customWindow.fetchWalletPortfolio) {
+                customWindow.fetchWalletPortfolio(address);
+                console.log(`Triggered second Portfolio update to ensure data is loaded for address: ${address}`);
+              }
+            }, 1000);
+          }
+        }
+      }, 500);
+      
+      setLoadingPrice(prev => ({ ...prev, [address]: false }));
+      return;
+    }
+    
+    // Si pas de cache récent, continuer avec la récupération normale des prix
+    console.log(`No recent cached prices found for ${address}, fetching new prices`);
     
     // S'assurer que nous avons les tokens les plus récents
     // Utiliser une copie locale du wallet pour éviter les problèmes de timing
@@ -1054,9 +1223,29 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
             }).filter(Boolean) // Filtrer les éléments null
           };
           
-          // Appeler l'API pour sauvegarder les données du wallet
+          // Appeler l'API pour sauvegarder les données du wallet avec un nom de fichier spécifique pour les prix
           console.log('Saving wallet data with prices and values:', walletData);
-          saveWalletData(address, walletData);
+          
+          // Générer un timestamp pour le nom du fichier
+          const timestamp = Date.now();
+          const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
+          const pricesFileName = `${sanitizedAddress}_PRICES_${timestamp}.json`;
+          
+          // Utiliser l'API pour sauvegarder les données avec un nom de fichier personnalisé
+          try {
+            axios.post('/api/save-wallet', {
+              address,
+              walletData,
+              date: timestamp.toString(),
+              fileName: pricesFileName
+            }).then(response => {
+              console.log(`Wallet data with prices saved to ${pricesFileName}:`, response.data);
+            }).catch(error => {
+              console.error(`Error saving wallet data with prices for ${address}:`, error);
+            });
+          } catch (error) {
+            console.error(`Error saving wallet data with prices for ${address}:`, error);
+          }
         } catch (error) {
           console.error('Error updating wallet with prices:', error);
         }

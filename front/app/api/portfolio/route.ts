@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
       // Sanitize l'adresse pour correspondre au format utilisé dans les noms de fichiers
       const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
       
-      // Filtrer les fichiers qui commencent par l'adresse sanitizée et qui contiennent WALLET
+      // Filtrer les fichiers qui commencent par l'adresse sanitizée et qui contiennent WALLET ou PRICES
       targetFiles = targetFiles.filter(file => 
-        file.startsWith(sanitizedAddress) && file.includes('_WALLET_')
+        file.startsWith(sanitizedAddress) && (file.includes('_WALLET_') || file.includes('_PRICES_'))
       );
       console.log(`Files for address ${address} (sanitized as ${sanitizedAddress}):`, targetFiles);
       
@@ -55,11 +55,23 @@ export async function GET(request: NextRequest) {
     }
     
     // Trier les fichiers par date en utilisant le timestamp dans le nom de fichier
-    // Format attendu: ADDRESS_WALLET_TIMESTAMP.json
+    // Format attendu: ADDRESS_WALLET_TIMESTAMP.json ou ADDRESS_PRICES_TIMESTAMP.json
     targetFiles.sort((a, b) => {
       // Extraire les timestamps des noms de fichiers
-      const timestampA = a.split('_WALLET_')[1]?.replace('.json', '');
-      const timestampB = b.split('_WALLET_')[1]?.replace('.json', '');
+      let timestampA, timestampB;
+      
+      // Détecter le type de fichier et extraire le timestamp en conséquence
+      if (a.includes('_WALLET_')) {
+        timestampA = a.split('_WALLET_')[1]?.replace('.json', '');
+      } else if (a.includes('_PRICES_')) {
+        timestampA = a.split('_PRICES_')[1]?.replace('.json', '');
+      }
+      
+      if (b.includes('_WALLET_')) {
+        timestampB = b.split('_WALLET_')[1]?.replace('.json', '');
+      } else if (b.includes('_PRICES_')) {
+        timestampB = b.split('_PRICES_')[1]?.replace('.json', '');
+      }
       
       if (!timestampA || !timestampB) {
         return b.localeCompare(a); // Fallback au tri lexicographique si le format ne correspond pas
@@ -106,15 +118,33 @@ export async function GET(request: NextRequest) {
     const portfolioData = walletData.tokens
       .filter((token: any) => token && typeof token === 'object' && !token.tokenIsNFT) // Filter out NFTs and ensure valid objects
       .map((token: any, index: number) => {
-        // Utiliser la valeur calculée si disponible (price * balance)
-        const price = token.price || 0;
-        const tokenValue = token.value !== undefined && token.value !== null 
-          ? token.value 
-          : (price * token.balance) || 0;
+        // S'assurer que nous avons un prix valide
+        const price = token.price !== undefined && token.price !== null ? token.price : 0;
+        
+        // S'assurer que nous avons une balance valide
+        const balance = token.balance !== undefined && token.balance !== null ? token.balance : 0;
+        
+        // Calculer la valeur du token (price * balance)
+        let tokenValue;
+        
+        // Utiliser valueStableCoin si disponible
+        if (token.valueStableCoin !== undefined && token.valueStableCoin !== null) {
+          tokenValue = token.valueStableCoin;
+        } 
+        // Sinon, utiliser value si disponible
+        else if (token.value !== undefined && token.value !== null) {
+          tokenValue = token.value;
+        } 
+        // Sinon, calculer la valeur (price * balance)
+        else {
+          tokenValue = price * balance;
+        }
         
         // Use average price if available, otherwise use current price
         const averagePrice = token.averagePrice || price;
-        const totalPrice = averagePrice * token.balance || tokenValue;
+        const totalPrice = averagePrice * balance || tokenValue;
+        
+        console.log(`Token ${token.symbol || 'Unknown'}: price=${price}, balance=${balance}, value=${tokenValue}`);
         
         return {
           _id: (index + 1).toString(),
@@ -122,15 +152,17 @@ export async function GET(request: NextRequest) {
           mint: token.mint, // Include mint address
           actualPrice: price,
           averagePrice: averagePrice,
-          numberCoin: token.balance || 0,
+          numberCoin: balance,
           name: token.name || token.symbol || 'Unknown',
           logo: token.logo || '',
           exchange: token.priceSource ? [token.priceSource.toLowerCase()] : ['unknown'],
           totalActualPrice: tokenValue,
           totalPrice: totalPrice,
           dateImport: new Date().toISOString(),
+          // Ajouter explicitement les champs pour le composant Portfolio
           price: price,
-          value: tokenValue
+          value: tokenValue,
+          valueStableCoin: tokenValue // Ajouter ce champ pour compatibilité
         };
       });
     
