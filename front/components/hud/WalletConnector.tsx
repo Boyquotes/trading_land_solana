@@ -52,6 +52,7 @@ interface WalletConnectorProps {
   onAddressesChange: (addresses: string[]) => void;
   onWalletChange: (wallet: WalletState) => void;
   setNotifications: (notificationsFn: (prev: NotificationType[]) => NotificationType[]) => void;
+  gameInstance?: any; // Game instance for 3D interactions
 }
 
 // Compteur global pour générer des identifiants uniques
@@ -80,7 +81,7 @@ const saveWalletData = async (address: string, walletData: any) => {
   }
 };
 
-export function WalletConnector({ onAddressesChange, onWalletChange, setNotifications }: WalletConnectorProps) {
+export function WalletConnector({ onAddressesChange, onWalletChange, setNotifications, gameInstance }: WalletConnectorProps) {
   // Wallet detection and state
   const [detectedWallets, setDetectedWallets] = useState<WalletInfo[]>([]);
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -415,6 +416,41 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
               });
               console.log("New wallet data for", address, newWallet[address]);
               console.log("New wallet data for", address, wallet);
+              
+              // Spawn a coin cube for this token if it's not an NFT
+              if (!tokenIsNFT && gameInstance?.websocketManager) {
+                const spawnCubeCoinMessage = {
+                  t: 6, // ClientMessageType.SPAWN_CUBE_COIN
+                  position: { x: newWallet[address].length * 5, y: 10, z: 0 }, // Spread cubes along x axis
+                  size: { width: 2, height: 2, depth: 2 },
+                  color: '#00ff00', // Green color for coins
+                  textureUrl: metadata?.logo || undefined, // Use token logo as texture if available
+                  symbol: metadata?.symbol || 'TOKEN',
+                  mintAddress: token.mint
+                };
+                
+                try {
+                  gameInstance.websocketManager.send(spawnCubeCoinMessage);
+                  console.log('[WalletCoin] Sent SPAWN_CUBE_COIN for token', metadata?.symbol, token.mint);
+                } catch (error) {
+                  console.error('[WalletCoin] Failed to send SPAWN_CUBE_COIN message:', error);
+                  
+                  // Fallback to regular cube if message fails
+                  try {
+                    const fallbackMessage = {
+                      t: 5, // ClientMessageType.SPAWN_CUBE
+                      position: { x: newWallet[address].length * 5, y: 10, z: 0 },
+                      size: { width: 2, height: 2, depth: 2 },
+                      color: '#deb887', // Wood color fallback
+                    };
+                    gameInstance.websocketManager.send(fallbackMessage);
+                    console.log('[WalletCoin] Sent fallback SPAWN_CUBE message');
+                  } catch (fallbackError) {
+                    console.error('[WalletCoin] Even fallback message failed:', fallbackError);
+                  }
+                }
+              }
+              
               return newWallet;
             });
           } catch (error) {

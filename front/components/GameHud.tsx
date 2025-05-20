@@ -73,7 +73,7 @@ export default function GameHud({
       console.warn('[WoodCubeDebug] gameInstance.websocketManager not found');
     }
   }
-  
+  // addWoodCubeEntity()
   // Use the WalletConnector hook
   const {
     detectedWallets,
@@ -90,7 +90,8 @@ export default function GameHud({
   } = WalletConnector({
     onAddressesChange: setAddresses,
     onWalletChange: setWallet,
-    setNotifications
+    setNotifications,
+    gameInstance
   });
   
   // Handle notifications from chat messages
