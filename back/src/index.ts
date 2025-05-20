@@ -34,6 +34,9 @@ import { FollowTargetSystem } from './ecs/system/FollowTargetSystem.js'
 import { ProximityPromptSystem } from './ecs/system/events/ProximityPromptEventSystem.js'
 import { ConvexHullColliderSystem } from './ecs/system/physics/ConvexHullColliderSystem.js'
 import { VehicleSystem } from './ecs/system/VehicleSystem.js'
+import { CombatSystem } from './ecs/system/CombatSystem.js'
+import { PlayerAttackSystem } from './ecs/system/PlayerAttackSystem.js'
+import { ProjectileSystem } from './ecs/system/ProjectileSystem.js'
 
 // TODO: Make it wait for the websocket server to start
 const eventSystem = EventSystem.getInstance()
@@ -65,6 +68,9 @@ const proximityPromptSystem = new ProximityPromptSystem()
 
 const movementSystem = new MovementSystem()
 const vehicleSystem = new VehicleSystem()
+const combatSystem = new CombatSystem()
+const playerAttackSystem = new PlayerAttackSystem()
+const projectileSystem = new ProjectileSystem()
 const networkSystem = new NetworkSystem()
 
 const animationSystem = new AnimationSystem()
@@ -129,6 +135,11 @@ async function updateGameState(dt: number) {
   lockedRotationSystem.update(entities)
   networkSystem.update(entities)
   sleepCheckSystem.update(entities)
+
+  // Combat systems
+  combatSystem.update(entities)
+  playerAttackSystem.update(entities)
+  projectileSystem.update(entities, dt)
 
   // Finalize events
   destroyEventSystem.afterUpdate(entities)

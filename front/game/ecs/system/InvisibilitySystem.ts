@@ -5,12 +5,16 @@ import { EventSystem } from '@shared/system/EventSystem.js'
 import { ComponentAddedEvent } from '@shared/component/events/ComponentAddedEvent.js'
 import { ComponentRemovedEvent } from '@shared/component/events/ComponentRemovedEvent.js'
 import { EntityManager } from '@shared/system/EntityManager.js'
+import * as THREE from 'three'
 
 /**
  * On InvisibleComponent added, make the entity invisible
  * On InvisibleComponent removed, make the entity visible again
  */
 export class InvisibilitySystem {
+  constructor(private scene?: THREE.Scene) {
+    // Scene is optional for backward compatibility
+  }
   update(entities: Entity[]): void {
     // Handle added invisible components
     const addedInvisibleEvents = EventSystem.getEventsWrapped(

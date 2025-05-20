@@ -15,4 +15,8 @@ export interface InputMessage extends ClientMessage {
   y: number
   // INTERACTION
   i: boolean
+  // ATTACK
+  a: boolean
+  // HEAVY_ATTACK
+  h: boolean
 }

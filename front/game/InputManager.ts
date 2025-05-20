@@ -29,6 +29,10 @@ export class InputManager {
     y: 0,
     // INTERACTION
     i: false,
+    // ATTACK
+    a: false,
+    // HEAVY_ATTACK
+    h: false,
   }
   proximityPromptSystem = new ProximityPromptSystem()
 
@@ -49,6 +53,9 @@ export class InputManager {
 
     // Add event listeners to handle user input
     window.addEventListener('keydown', this.handleKeyDown.bind(this))
+    window.addEventListener('keyup', this.handleKeyUp.bind(this))
+    window.addEventListener('mousedown', this.handleMouseDown.bind(this))
+    window.addEventListener('mouseup', this.handleMouseUp.bind(this))
     window.addEventListener('keyup', this.handleKeyUp.bind(this))
   }
 
@@ -79,9 +86,47 @@ export class InputManager {
     this.inputState.u = false
   }
 
+  handleAttack(isAttacking: boolean, isHeavy: boolean = false): void {
+    if (isHeavy) {
+      this.inputState.h = isAttacking
+    } else {
+      this.inputState.a = isAttacking
+    }
+    console.log(`[Input] ${isHeavy ? 'Heavy' : 'Normal'} attack ${isAttacking ? 'started' : 'ended'}`)
+    this.webSocketManager.send(this.inputState)
+  }
+
+  private handleMouseDown(event: MouseEvent): void {
+    console.log(`[Input] Mouse down: ${event.button} (shift: ${event.shiftKey})`)
+    if (event.button === 0) {
+      // Left mouse button - normal attack
+      this.inputState.a = true
+      this.handleAttack(true, false)
+    } else if (event.button === 2) {
+      // Right mouse button - heavy attack
+      this.inputState.h = true
+      this.handleAttack(true, true)
+    }
+  }
+
+  private handleMouseUp(event: MouseEvent): void {
+    if (event.button === 0) {
+      // Left mouse button - normal attack
+      this.inputState.a = false
+      this.handleAttack(false, false)
+    } else if (event.button === 2) {
+      // Right mouse button - heavy attack
+      this.inputState.h = false
+      this.handleAttack(false, true)
+    }
+  }
+
   private handleKeyDown(event: KeyboardEvent) {
     if (!this.pcUser) this.pcUser = true
-    if (!this.isGameFocused(event)) return
+    if (!this.isGameFocused(event)) {
+      console.log('[Input] Ignoring keydown - game not focused')
+      return
+    }
     switch (this.keyboardLanguage) {
       case KeyboardLanguage.EN:
         switch (event.key) {
@@ -111,6 +156,10 @@ export class InputManager {
           case 'E':
           case 'e':
             this.inputState.i = true
+            break
+          case 'F':
+          case 'f':
+            this.handleAttack(true)
             break
         }
         break
@@ -149,6 +198,9 @@ export class InputManager {
   }
 
   private handleKeyUp(event: KeyboardEvent) {
+    if (event.key === 'f' || event.key === 'F') {
+      this.handleAttack(false)
+    }
     switch (this.keyboardLanguage) {
       case KeyboardLanguage.EN:
         switch (event.key) {

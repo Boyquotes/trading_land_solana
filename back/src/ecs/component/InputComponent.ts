@@ -8,4 +8,6 @@ export class InputComponent extends Component {
   space: boolean = false
   lookingYAngle = 0
   interact: boolean = false
+  attack: boolean = false
+  heavyAttack: boolean = false
 }

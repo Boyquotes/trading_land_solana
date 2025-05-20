@@ -12,6 +12,10 @@ export class VehicleSystem {
   private entityWheels: Map<number, THREE.Mesh[]> = new Map()
   private wheelModelUrl =
     'https://notbloxo.fra1.cdn.digitaloceanspaces.com/Notblox-Assets/vehicle/Wheel.glb'
+  
+  constructor(private scene?: THREE.Scene) {
+    // Scene is optional for backward compatibility
+  }
 
   update(entities: Entity[]) {
     // Catch vehicle creation, add wheels to it.

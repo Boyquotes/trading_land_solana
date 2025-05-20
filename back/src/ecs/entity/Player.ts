@@ -27,8 +27,13 @@ export class Player {
   constructor(ws: WebSocket, initialX: number, initialY: number, initialZ: number) {
     this.entity = EntityManager.createEntity(SerializedEntityType.PLAYER)
     // Tag
+    // Player identification
     const playerComponent = new PlayerComponent(this.entity.id)
     this.entity.addComponent(playerComponent)
+    
+    // Player input handling
+    const inputComponent = new InputComponent(this.entity.id)
+    this.entity.addComponent(inputComponent)
 
     const positionComponent = new PositionComponent(this.entity.id, initialX, initialY, initialZ)
     this.entity.addComponent(positionComponent)

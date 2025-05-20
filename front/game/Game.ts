@@ -18,6 +18,7 @@ import {
   TextComponentSystem,
   InvisibilitySystem,
   VehicleSystem,
+  ProjectileRenderingSystem,
 } from './ecs/system'
 import { Hud } from './Hud'
 import { Renderer } from './Renderer'
@@ -48,6 +49,7 @@ export class Game {
   private textComponentSystem: TextComponentSystem
   private vehicleSystem: VehicleSystem
   private invisibilitySystem: InvisibilitySystem
+  private projectileRenderingSystem: ProjectileRenderingSystem
   renderer: Renderer
   hud: Hud
   private identifyFollowedMeshSystem: IdentifyFollowedMeshSystem
@@ -67,10 +69,16 @@ export class Game {
     this.identifyFollowedMeshSystem = new IdentifyFollowedMeshSystem()
     this.eventSystem = EventSystem.getInstance()
     this.textComponentSystem = new TextComponentSystem()
+
+    // Initialize renderer first
+    this.renderer = new Renderer(gameContainerRef)
+    
+    // Initialize systems
     this.vehicleSystem = new VehicleSystem()
     this.invisibilitySystem = new InvisibilitySystem()
-
-    this.renderer = new Renderer(gameContainerRef)
+    
+    // Initialize ProjectileRenderingSystem with the scene
+    this.projectileRenderingSystem = new ProjectileRenderingSystem(this.renderer.scene)
     this.inputManager = new InputManager(this.websocketManager, this.renderer.camera.controlSystem)
     this.hud = new Hud()
   }
@@ -133,6 +141,7 @@ export class Game {
     this.meshSystem.update(entities, this.renderer)
     this.vehicleSystem.update(entities)
     this.invisibilitySystem.update(entities)
+    this.projectileRenderingSystem.update(entities)
     const positionInterpFactor = deltaTime / (1000 / config.SERVER_TICKRATE)
     this.syncPositionSystem.update(entities, positionInterpFactor / 2)
     this.syncRotationSystem.update(entities, 0.7)
