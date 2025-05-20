@@ -4,6 +4,7 @@ import { getTokenAccounts, getTokenMetadata } from './utils/TokenUtils';
 import { getBinancePrice, getJupiterPrice, findCoinGeckoId, fetchTokenPrice, fetchCoinGeckoCoins } from './utils/PriceUtils';
 import { sleep, getTokenSymbolReturnSymbol } from './utils/TokenUtils';
 import axios from 'axios';
+import fs from 'fs';
 
 // Extend the Window interface to include wallet providers
 declare global {
@@ -77,6 +78,157 @@ const saveWalletData = async (address: string, walletData: any) => {
     return response.data;
   } catch (error) {
     console.error('Error saving wallet data:', error);
+    return null;
+  }
+};
+
+/**
+ * Check if there's a recent wallet cache file (less than specified hours old)
+ * @param address Wallet address to check for
+ * @param hour Number of hours to consider the cache valid
+ * @returns The cached wallet data if found and recent, null otherwise
+ */
+const checkForRecentWalletCache = async (address: string, hour: number) => {
+  try {
+    // Get list of files in the wallets directory
+    const response = await axios.get('/api/list-wallets');
+    
+    if (!response.data.success) {
+      console.error('Failed to list wallet files:', response.data.error);
+      return null;
+    }
+    
+    const files = response.data.files;
+    const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // Find the most recent wallet file for this address
+    const walletFiles = files.filter((file: string) => 
+      file.startsWith(sanitizedAddress) && file.includes('_WALLET_')
+    );
+    
+    if (walletFiles.length === 0) {
+      console.log(`No cached wallet files found for ${address}`);
+      return null;
+    }
+    
+    // Sort by timestamp (newest first)
+    walletFiles.sort((a: string, b: string) => {
+      const timestampA = parseInt(a.split('_WALLET_')[1].replace('.json', '')) || 0;
+      const timestampB = parseInt(b.split('_WALLET_')[1].replace('.json', '')) || 0;
+      return timestampB - timestampA;
+    });
+    
+    const mostRecentFile = walletFiles[0];
+    const timestamp = parseInt(mostRecentFile.split('_WALLET_')[1].replace('.json', '')) || 0;
+    
+    // Check if the file is less than specified hours old
+    const hoursInMs = hour * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    if (now - timestamp < hoursInMs) {
+      // File is recent, load it
+      const fileResponse = await axios.get(`/wallets/${mostRecentFile}`);
+      return fileResponse.data;
+    } else {
+      console.log(`Cached wallet file for ${address} is more than ${hour} hours old`);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error checking for wallet cache:', error);
+    return null;
+  }
+};
+
+/**
+ * Check if there's a recent token accounts cache file (less than specified hours old)
+ * @param address Wallet address to check for
+ * @param hour Number of hours to consider the cache valid
+ * @returns The cached token accounts if found and recent, null otherwise
+ */
+const checkForRecentTokenAccountsCache = async (address: string, hour: number) => {
+  try {
+    // Get list of files in the wallets directory
+    const response = await axios.get('/api/list-wallets');
+    
+    if (!response.data.success) {
+      console.error('Failed to list wallet files:', response.data.error);
+      return null;
+    }
+    
+    const files = response.data.files;
+    const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // Find the most recent token accounts file for this address
+    const tokenAccountsFiles = files.filter((file: string) => 
+      file.startsWith(sanitizedAddress) && file.includes('_tokenAccounts_')
+    );
+    
+    if (tokenAccountsFiles.length === 0) {
+      console.log(`No cached token accounts files found for ${address}`);
+      return null;
+    }
+    
+    // Sort by timestamp (newest first)
+    tokenAccountsFiles.sort((a: string, b: string) => {
+      const timestampA = parseInt(a.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
+      const timestampB = parseInt(b.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
+      return timestampB - timestampA;
+    });
+    
+    const mostRecentFile = tokenAccountsFiles[0];
+    const timestamp = parseInt(mostRecentFile.split('_tokenAccounts_')[1].replace('.json', '')) || 0;
+    
+    // Check if the file is less than specified hours old
+    const hoursInMs = hour * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    if (now - timestamp < hoursInMs) {
+      // File is recent, load it
+      const fileResponse = await axios.get(`/wallets/${mostRecentFile}`);
+      console.log(`Loaded cached token accounts from ${mostRecentFile}`);
+      return fileResponse.data.tokenAccounts;
+    } else {
+      console.log(`Cached token accounts file for ${address} is more than ${hour} hours old`);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error checking for token accounts cache:', error);
+    return null;
+  }
+};
+
+/**
+ * Save token accounts data to a JSON file
+ * @param address Wallet address
+ * @param tokenAccounts Token accounts data to save
+ */
+const saveTokenAccountsToJson = async (address: string, tokenAccounts: { mint: string; balance: number }[]) => {
+  try {
+    // Create data object with metadata
+    const dataToSave = {
+      address,
+      lastUpdated: new Date().toISOString(),
+      tokenAccounts,
+      totalTokens: tokenAccounts.length,
+    };
+    
+    // Generate timestamp for filename
+    const timestamp = Date.now();
+    const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `${sanitizedAddress}_tokenAccounts_${timestamp}.json`;
+    
+    // Save to server
+    const response = await axios.post('/api/save-wallet', {
+      address,
+      walletData: dataToSave,
+      date: timestamp.toString(),
+      fileName
+    });
+    
+    console.log(`Token accounts data saved to ${fileName}:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error saving token accounts data for ${address}:`, error);
     return null;
   }
 };
@@ -365,47 +517,117 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
     try {
       setLoadingPortfolio(prev => ({ ...prev, [address]: true }));
       
-      // Fetch token accounts for this address
-      const tokenAccounts = await getTokenAccounts(address, solanaConnection);
-      console.log(`Found ${tokenAccounts.length} token accounts for ${address}`);
+      // Check if we have a recent cached wallet data file (less than 1 hour old)
+      const cachedData = await checkForRecentWalletCache(address, 1);
       
       // Initialize wallet data for this address if it doesn't exist
       if (!wallet[address]) {
         setWallet(prev => ({ ...prev, [address]: [] }));
       }
       
+      // If we have recent cached data, use it instead of fetching token accounts
+      let tokenAccounts: { mint: string; balance: number }[] = [];
+      if (cachedData) {
+        console.log(`Using cached wallet data for ${address} (less than 1 hour old)`);
+        // Use the cached token data
+        if (cachedData.tokens && Array.isArray(cachedData.tokens)) {
+          // Update the wallet with cached tokens
+          setWallet(prev => {
+            const newWallet = { ...prev };
+            newWallet[address] = cachedData.tokens;
+            return newWallet;
+          });
+          
+          // Skip token account fetching
+          tokenAccounts = [];
+        } else {
+          // Check for cached token accounts (less than 4 hours old)
+          const cachedTokenAccounts = await checkForRecentTokenAccountsCache(address, 4);
+          
+          if (cachedTokenAccounts) {
+            console.log(`Using cached token accounts for ${address} (less than 4 hours old)`);
+            tokenAccounts = cachedTokenAccounts;
+            
+            // Count live tokens from cached data
+            const liveTokensCount = cachedTokenAccounts.filter((token: { mint: string; balance: number }) => token.balance > 0).length;
+            console.log(`Found ${liveTokensCount} live tokens in cached data for ${address}`);
+            
+            // Update live token count
+            setLiveTokenCount(prev => ({ ...prev, [address]: liveTokensCount }));
+          } else {
+            // No cached token accounts, fetch from blockchain
+            tokenAccounts = await getTokenAccounts(address, solanaConnection);
+            console.log(`Fetched ${tokenAccounts.length} token accounts for ${address} from blockchain`);
+            
+            // Save token accounts to cache file
+            if (tokenAccounts.length > 0) {
+              await saveTokenAccountsToJson(address, tokenAccounts);
+            }
+          }
+        }
+      } else {
+        // Check for cached token accounts (less than 4 hours old)
+        const cachedTokenAccounts = await checkForRecentTokenAccountsCache(address, 4);
+        
+        if (cachedTokenAccounts) {
+          console.log(`Using cached token accounts for ${address} (less than 4 hours old)`);
+          tokenAccounts = cachedTokenAccounts;
+          
+          // Count live tokens from cached data
+          const liveTokensCount = cachedTokenAccounts.filter((token: { mint: string; balance: number }) => token.balance > 0).length;
+          console.log(`Found ${liveTokensCount} live tokens in cached data for ${address}`);
+          
+          // Update live token count
+          setLiveTokenCount(prev => ({ ...prev, [address]: liveTokensCount }));
+        } else {
+          // No cached token accounts, fetch from blockchain
+          tokenAccounts = await getTokenAccounts(address, solanaConnection);
+          console.log(`Fetched ${tokenAccounts.length} token accounts for ${address} from blockchain`);
+          
+          // Save token accounts to cache file
+          if (tokenAccounts.length > 0) {
+            await saveTokenAccountsToJson(address, tokenAccounts);
+          }
+        }
+      }
+      
       // Process each token account
       let liveTokens = 0;
       let stop = 200;
-      for (const token of tokenAccounts) {
-        if (stop-- <= 0) break;
-        // Skip tokens with zero balance
-        if (token.balance <= 0) continue;
-        
-        liveTokens++;
-        
-        // Check if we already have this token in our wallet
-        const existingTokenIndex = wallet[address]?.findIndex(t => t.mint === token.mint);
-        
-        if (existingTokenIndex !== -1 && existingTokenIndex !== undefined) {
-          // Update existing token
-          setWallet(prev => {
-            const newWallet = { ...prev };
-            newWallet[address][existingTokenIndex].balance = token.balance;
-            return newWallet;
-          });
-        } else {
-          // Add new token
-          try {
-            // Get token metadata
-            const metadata = await getTokenMetadata(token.mint, token.balance);
-            
-            // Determine if token is an NFT (balance is 1 and no decimals)
-            const tokenIsNFT = token.balance === 1;
-            
-            // Add token to wallet
+      
+      // If we're using cached token accounts and already counted live tokens, skip processing
+      const skipTokenProcessing = tokenAccounts.length === 0;
+      
+      if (!skipTokenProcessing) {
+        for (const token of tokenAccounts) {
+          if (stop-- <= 0) break;
+          // Skip tokens with zero balance
+          if (token.balance <= 0) continue;
+          
+          liveTokens++;
+          
+          // Check if we already have this token in our wallet
+          const existingTokenIndex = wallet[address]?.findIndex(t => t.mint === token.mint);
+          
+          if (existingTokenIndex !== -1 && existingTokenIndex !== undefined) {
+            // Update existing token
             setWallet(prev => {
               const newWallet = { ...prev };
+              newWallet[address][existingTokenIndex].balance = token.balance;
+              return newWallet;
+            });
+          } else {
+            // Add new token
+            try {
+              // Get token metadata
+              const metadata = await getTokenMetadata(token.mint, token.balance);
+              
+              // Determine if token is an NFT (balance is 1 and no decimals)
+              const tokenIsNFT = token.balance === 1;
+              
+              // Add token to wallet
+              setWallet(prev => {
+                const newWallet = { ...prev };
               if (!newWallet[address]) {
                 newWallet[address] = [];
               }
@@ -464,30 +686,28 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       
       // Mise à jour du nombre de tokens actifs
       setLiveTokenCount(prev => ({ ...prev, [address]: liveTokens }));
-      
-      // Mettre à jour le portefeuille et sauvegarder les données dans un même callback
-      // pour s'assurer que nous utilisons les données les plus récentes
-      setWallet(prev => {
-        const updatedWallet = { ...prev };
-        
-        // S'assurer que l'adresse existe dans le portefeuille
-        if (updatedWallet[address] && updatedWallet[address].length > 0) {
-          console.log("Wallet data inside setState callback:", updatedWallet[address]);
+        // Mettre à jour le portefeuille et sauvegarder les données dans un même callback
+        // pour s'assurer que nous utilisons les données les plus récentes
+        setWallet(prev => {
+          const updatedWallet = { ...prev };
           
-          // Sauvegarder les données du portefeuille dans un fichier JSON
-          // en utilisant les données mises à jour
-          saveWalletDataToJson(address, updatedWallet[address])
-            .catch(error => console.error(`Error saving wallet data for ${address}:`, error));
-        }
-        
-        // Mettre à jour le composant parent avec le nouvel état du portefeuille
-        onWalletChange(updatedWallet);
-        
-        return updatedWallet;
-      });
-      
-      // Ne pas rafraîchir les prix ici, car nous le ferons automatiquement plus tard
-      // refreshTokenPrices(address);
+          // S'assurer que l'adresse existe dans le portefeuille
+          if (updatedWallet[address] && updatedWallet[address].length > 0) {
+            console.log("Wallet data inside setState callback:", updatedWallet[address]);
+            if (!cachedData) {
+              // Sauvegarder les données du portefeuille dans un fichier JSON
+              // en utilisant les données mises à jour
+              saveWalletDataToJson(address, updatedWallet[address])
+                .catch(error => console.error(`Error saving wallet data for ${address}:`, error));
+            }
+          }
+          
+          // Mettre à jour le composant parent avec le nouvel état du portefeuille
+          onWalletChange(updatedWallet);
+          
+          return updatedWallet;
+        });
+      }
       
       // Mettre à jour le composant Portfolio avec les données du dernier fichier wallet
       // Vérifier si la fonction fetchWalletPortfolio est disponible dans window
@@ -553,25 +773,26 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
         }
       }
       
-      // Lancer automatiquement le rafraîchissement des prix après avoir chargé le portefeuille
-      // Attendre un court instant pour s'assurer que le portefeuille est bien chargé
-      const refreshDelay = 2000; // 2 secondes de délai
-      console.log(`Scheduling price refresh for address: ${address} in ${refreshDelay/1000} seconds`);
-      
-      // Vérifier que nous avons des tokens avant de planifier le rafraîchissement
-      if (wallet[address] && wallet[address].length > 0) {
-        console.log(`Found ${wallet[address].length} tokens in wallet, scheduling refresh`);
-        setTimeout(() => {
-          console.log(`Auto-refreshing prices for address: ${address}`);
-          refreshTokenPrices(address);
-        }, refreshDelay);
-      } else {
-        console.log(`No tokens found in wallet yet, using a longer delay for refresh`);
-        // Utiliser un délai plus long si aucun token n'est encore chargé
-        setTimeout(() => {
-          console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
-          refreshTokenPrices(address);
-        }, 25000); // 5 secondes de délai
+      if (!cachedData) {
+        // Lancer automatiquement le rafraîchissement des prix après avoir chargé le portefeuille
+        // Attendre un court instant pour s'assurer que le portefeuille est bien chargé
+        const refreshDelay = 2000; // 2 secondes de délai
+        console.log(`Scheduling price refresh for address: ${address} in ${refreshDelay/1000} seconds`);
+        // Vérifier que nous avons des tokens avant de planifier le rafraîchissement
+        if (wallet[address] && wallet[address].length > 0) {
+          console.log(`Found ${wallet[address].length} tokens in wallet, scheduling refresh`);
+          setTimeout(() => {
+            console.log(`Auto-refreshing prices for address: ${address}`);
+            refreshTokenPrices(address);
+          }, refreshDelay);
+        } else {
+          console.log(`No tokens found in wallet yet, using a longer delay for refresh`);
+          // Utiliser un délai plus long si aucun token n'est encore chargé
+          setTimeout(() => {
+            console.log(`Auto-refreshing prices for address: ${address} (delayed attempt)`);
+            refreshTokenPrices(address);
+          }, 25000); // 5 secondes de délai
+        }
       }
       
       // Afficher une notification de succès
@@ -585,6 +806,21 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       }]);
       setTimeout(() => {
         setNotifications(prev => prev.filter(n => n.id !== notifId));
+      }, 5000);
+    } catch (error) {
+      console.error(`Error checking portfolio for address ${address}:`, error);
+      
+      // Show error notification
+      const errorNotifId = generateUniqueNotificationId();
+      const errorNow = Date.now();
+      setNotifications(prev => [...prev, { 
+        id: errorNotifId, 
+        content: `Erreur lors de la vérification du portefeuille: ${error instanceof Error ? error.message : 'Erreur inconnue'}`, 
+        author: "Portfolio", 
+        timestamp: errorNow 
+      }]);
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== errorNotifId));
       }, 5000);
     } finally {
       setLoadingPortfolio(prev => ({ ...prev, [address]: false }));
