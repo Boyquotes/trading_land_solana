@@ -55,7 +55,7 @@ export default function GameHud({
   const [wallet, setWallet] = useState<{[address: string]: Array<{mint: string, balance: number, name?: string | null, symbol?: string | null, logo?: string | null, tokenIsNFT?: boolean, valueStableCoin?: number | null}>}>({});
   
   // Initialize Solana connection
-  const rpcEndpoint = process.env.NEXT_PUBLIC_RPC_URL;
+  const rpcEndpoint: string = process.env.NEXT_PUBLIC_RPC_URL || "https://api.mainnet-beta.solana.com";
   const solanaConnection = new Connection(rpcEndpoint);
   
   // Helper to add a vehicle entity
