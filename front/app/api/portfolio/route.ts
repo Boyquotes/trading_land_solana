@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
     const portfolioData = walletData.tokens
       .filter((token: any) => token && typeof token === 'object' && !token.tokenIsNFT) // Filter out NFTs and ensure valid objects
       .map((token: any, index: number) => {
+
         // S'assurer que nous avons un prix valide
         const price = token.price !== undefined && token.price !== null ? token.price : 0;
         
@@ -159,10 +160,12 @@ export async function GET(request: NextRequest) {
           totalActualPrice: tokenValue,
           totalPrice: totalPrice,
           dateImport: new Date().toISOString(),
+
           // Ajouter explicitement les champs pour le composant Portfolio
           price: price,
           value: tokenValue,
           valueStableCoin: tokenValue // Ajouter ce champ pour compatibilité
+
         };
       });
     

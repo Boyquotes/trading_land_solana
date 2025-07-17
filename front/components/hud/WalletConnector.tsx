@@ -327,7 +327,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
   // Memoized CoinGecko coins list
   const [coinGeckoCoins, setCoinGeckoCoins] = useState<any[] | null>(null);
   
-  const rpcEndpoint = process.env.NEXT_PUBLIC_RPC_URL;
+  const rpcEndpoint: string = process.env.NEXT_PUBLIC_RPC_URL || "https://api.mainnet-beta.solana.com";
   const solanaConnection = new Connection(rpcEndpoint);
 
   // Detect available wallets
@@ -824,6 +824,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
           const checkTransactionFile = async () => {
             try {
               const response = await fetch(`/transactions/${address}.json`, { cache: 'no-store' });
+
               console.log(`Checking transaction file for ${address}: response status ${response.status}`);  
               
               // Si le fichier n'existe pas (404), récupérer les transactions
@@ -868,7 +869,6 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
                 }
               }
               
-
             } catch (error) {
               console.error(`Error checking transaction file for ${address}:`, error);
               // En cas d'erreur, récupérer les transactions par défaut
@@ -887,6 +887,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
       // Attendre un court instant pour s'assurer que le portefeuille est bien chargé
       const refreshDelay = 2000; // 2 secondes de délai
       console.log(`Scheduling price refresh for address: ${address} in ${refreshDelay/1000} seconds`);
+
       // Vérifier que nous avons des tokens avant de planifier le rafraîchissement
       if (wallet[address] && wallet[address].length > 0) {
         console.log(`Found ${wallet[address].length} tokens in wallet, scheduling refresh`);
@@ -1223,6 +1224,7 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
             }).filter(Boolean) // Filtrer les éléments null
           };
           
+
           // Appeler l'API pour sauvegarder les données du wallet avec un nom de fichier spécifique pour les prix
           console.log('Saving wallet data with prices and values:', walletData);
           
@@ -1246,6 +1248,10 @@ export function WalletConnector({ onAddressesChange, onWalletChange, setNotifica
           } catch (error) {
             console.error(`Error saving wallet data with prices for ${address}:`, error);
           }
+
+          // Appeler l'API pour sauvegarder les données du wallet
+          // console.log('Saving wallet data with prices and values:', walletData);
+          // saveWalletData(address, walletData);
         } catch (error) {
           console.error('Error updating wallet with prices:', error);
         }
