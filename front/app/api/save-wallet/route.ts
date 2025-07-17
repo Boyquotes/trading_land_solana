@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse the request body
     const requestData = await request.json();
-    const { address, walletData, date } = requestData;
+    const { address, walletData, date, fileName: customFileName } = requestData;
     
     // Validate input
     if (!address || !walletData) {
@@ -24,8 +24,9 @@ export async function POST(request: NextRequest) {
     // Sanitize the address to create a valid filename
     // Remove any characters that might be invalid in a filename
     const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
-    // Use the provided date for the filename
-    const fileName = `${sanitizedAddress}-${date}.json`;
+    
+    // Use custom filename if provided, otherwise use default format
+    const fileName = customFileName || `${sanitizedAddress}_WALLET_${date}.json`;
     
     // Define the directory path and ensure it exists
     const walletsDir = path.join(process.cwd(), 'public', 'wallets');

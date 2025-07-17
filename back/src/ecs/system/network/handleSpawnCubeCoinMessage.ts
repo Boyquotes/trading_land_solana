@@ -3,6 +3,10 @@ import { Player } from '../../entity/Player.js'
 import { Mesh } from '../../entity/Mesh.js'
 import { Cube } from '../../entity/Cube.js'
 import { TextComponent } from '../../../../../shared/component/TextComponent.js'
+import { CoinCubeComponent } from '../../component/CoinCubeComponent.js'
+import { OnCollisionEnterEvent } from '../../component/events/OnCollisionEnterEvent.js'
+import { Entity } from '../../../../../shared/entity/Entity.js'
+import { PlayerComponent } from '../../../../../shared/component/PlayerComponent.js'
 
 export function handleSpawnCubeCoinMessage(ws: any, message: SpawnCubeCoinMessage) {
   const player: Player = ws.player
@@ -41,6 +45,24 @@ export function handleSpawnCubeCoinMessage(ws: any, message: SpawnCubeCoinMessag
       )
     }
     
+    // Add CoinCubeComponent to identify this as a coin cube
+    const coinComponent = new CoinCubeComponent(tokenModel.entity.id, symbol, mintAddress)
+    tokenModel.entity.addComponent(coinComponent)
+    
+    // Add OnCollisionEnterEvent to handle the collision detection
+    const onCollisionEnter = new OnCollisionEnterEvent(
+      tokenModel.entity.id,
+      (collidedEntity: Entity) => {
+        // Check if the collided entity is a player
+        const playerComponent = collidedEntity.getComponent(PlayerComponent)
+        if (playerComponent) {
+          // Trigger the coin collection
+          coinComponent.onPlayerCollision(collidedEntity)
+        }
+      }
+    )
+    tokenModel.entity.addComponent(onCollisionEnter)
+    
     console.log(`[SpawnCubeCoin] Player ${player.entity.id} spawned a token model for ${symbol || 'Unknown'} (${mintAddress || 'No mint'}) at`, position)
   } catch (error) {
     console.error(`[SpawnCubeCoin] Error spawning model:`, error)
@@ -65,6 +87,24 @@ export function handleSpawnCubeCoinMessage(ws: any, message: SpawnCubeCoinMessag
         new TextComponent(fallbackCube.entity.id, symbol, 0, size.height + 0.5, 0, 20)
       )
     }
+    
+    // Add CoinCubeComponent to identify this as a coin cube
+    const coinComponent = new CoinCubeComponent(fallbackCube.entity.id, symbol, mintAddress)
+    fallbackCube.entity.addComponent(coinComponent)
+    
+    // Add OnCollisionEnterEvent to handle the collision detection
+    const onCollisionEnter = new OnCollisionEnterEvent(
+      fallbackCube.entity.id,
+      (collidedEntity: Entity) => {
+        // Check if the collided entity is a player
+        const playerComponent = collidedEntity.getComponent(PlayerComponent)
+        if (playerComponent) {
+          // Trigger the coin collection
+          coinComponent.onPlayerCollision(collidedEntity)
+        }
+      }
+    )
+    fallbackCube.entity.addComponent(onCollisionEnter)
     
     console.log(`[SpawnCubeCoin] Fallback: Created cube for ${symbol || 'Unknown'} due to model load failure`)
   }

@@ -23,30 +23,29 @@ export async function GET(request: NextRequest) {
     
     console.log('All wallet files:', targetFiles);
     
-    // If address is provided, filter files for that specific address
+    // Si une adresse est fournie, filtrer les fichiers pour cette adresse spécifique
     if (address) {
-      // More flexible matching - the address might be part of the filename in various formats
-      targetFiles = targetFiles.filter(file => {
-        // Try different patterns that might include the address
-        return file.includes(address) || 
-               // Check for sanitized versions of the address (some systems replace special chars)
-               file.includes(address.replace(/[^a-zA-Z0-9]/g, '_'));
-      });
-      console.log(`Files for address ${address}:`, targetFiles);
+      // Sanitize l'adresse pour correspondre au format utilisé dans les noms de fichiers
+      const sanitizedAddress = address.replace(/[^a-zA-Z0-9]/g, '_');
       
-      // If no files found for this address, try a more lenient approach
+      // Filtrer les fichiers qui commencent par l'adresse sanitizée et qui contiennent WALLET ou PRICES
+      targetFiles = targetFiles.filter(file => 
+        file.startsWith(sanitizedAddress) && (file.includes('_WALLET_') || file.includes('_PRICES_'))
+      );
+      console.log(`Files for address ${address} (sanitized as ${sanitizedAddress}):`, targetFiles);
+      
+      // Si aucun fichier n'est trouvé pour cette adresse, essayer une approche plus souple
       if (targetFiles.length === 0) {
         console.log('No exact address matches found, trying partial matching');
-        // Try to match just the first part of the address (first 10 chars)
-        const addressPrefix = address.substring(0, 10);
+        // Essayer de faire correspondre juste la première partie de l'adresse (10 premiers caractères)
+        const addressPrefix = sanitizedAddress.substring(0, 10);
         targetFiles = fs.readdirSync(walletsDir)
-          .filter(file => file.endsWith('.json') && file.includes(addressPrefix));
+          .filter(file => file.endsWith('.json') && file.startsWith(addressPrefix));
         console.log(`Files matching address prefix ${addressPrefix}:`, targetFiles);
       }
     } else {
-      // If no address provided, use files with ADDRESS_WALLET pattern
-      targetFiles = targetFiles.filter(file => file.includes('ADDRESS_WALLET'));
-      console.log('Generic wallet files:', targetFiles);
+      // Si aucune adresse n'est fournie, utiliser tous les fichiers JSON
+      console.log('No address provided, using all JSON files');
     }
     
     // If no wallet files found, return empty array
@@ -55,66 +54,97 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [] });
     }
     
-    // Sort files by date (assuming filename format includes date)
-    // This will get the most recent file based on filename
+    // Trier les fichiers par date en utilisant le timestamp dans le nom de fichier
+    // Format attendu: ADDRESS_WALLET_TIMESTAMP.json ou ADDRESS_PRICES_TIMESTAMP.json
     targetFiles.sort((a, b) => {
-      return b.localeCompare(a); // Descending order
+      // Extraire les timestamps des noms de fichiers
+      let timestampA, timestampB;
+      
+      // Détecter le type de fichier et extraire le timestamp en conséquence
+      if (a.includes('_WALLET_')) {
+        timestampA = a.split('_WALLET_')[1]?.replace('.json', '');
+      } else if (a.includes('_PRICES_')) {
+        timestampA = a.split('_PRICES_')[1]?.replace('.json', '');
+      }
+      
+      if (b.includes('_WALLET_')) {
+        timestampB = b.split('_WALLET_')[1]?.replace('.json', '');
+      } else if (b.includes('_PRICES_')) {
+        timestampB = b.split('_PRICES_')[1]?.replace('.json', '');
+      }
+      
+      if (!timestampA || !timestampB) {
+        return b.localeCompare(a); // Fallback au tri lexicographique si le format ne correspond pas
+      }
+      
+      // Trier par timestamp en ordre décroissant (le plus récent en premier)
+      return parseInt(timestampB) - parseInt(timestampA);
     });
-    console.log('Sorted files:', targetFiles);
+    console.log('Sorted files by timestamp:', targetFiles);
+    
+    // Ajouter un log pour débogage
+    console.log('Using the most recent wallet file for portfolio data');
     
     // Get the most recent file
     const latestFile = targetFiles[0];
     const filePath = path.join(walletsDir, latestFile);
     console.log('Latest file:', latestFile);
     
-    // Read and parse the JSON file
+    // Read the file content
     const fileContent = fs.readFileSync(filePath, 'utf8');
-    const parsedData = JSON.parse(fileContent);
+    let walletData: { address: string; lastUpdated: string; tokens: any[] } = { address: '', lastUpdated: '', tokens: [] };
     
-    // Check the structure of the parsed data
-    console.log('Parsed data structure:', {
-      isArray: Array.isArray(parsedData),
-      type: typeof parsedData,
-      keys: typeof parsedData === 'object' ? Object.keys(parsedData) : 'not an object'
-    });
-    
-    // Ensure walletData is an array
-    let walletData: any[] = [];
-    
-    if (Array.isArray(parsedData)) {
-      // Data is already an array
-      walletData = parsedData;
-    } else if (typeof parsedData === 'object' && parsedData !== null) {
-      // Data might be an object with tokens as properties or in a nested property
-      if (parsedData.tokens && Array.isArray(parsedData.tokens)) {
-        // If there's a tokens array property
-        walletData = parsedData.tokens;
-      } else if (parsedData.data && Array.isArray(parsedData.data)) {
-        // If there's a data array property
-        walletData = parsedData.data;
+    try {
+      const parsedData = JSON.parse(fileContent);
+      
+      // Check if the data is in the expected format
+      if (parsedData && parsedData.tokens && Array.isArray(parsedData.tokens)) {
+        walletData = parsedData;
+        console.log(`Successfully parsed wallet data with ${walletData.tokens.length} tokens`);
       } else {
-        // Try to convert object to array if it looks like a collection of tokens
-        const possibleTokens = Object.values(parsedData);
-        if (possibleTokens.length > 0 && typeof possibleTokens[0] === 'object') {
-          walletData = possibleTokens;
-        }
+        // Try to extract tokens from the data structure
+        console.warn('Data structure not recognized, attempting to extract tokens');
+        walletData = { address: '', lastUpdated: '', tokens: [] };
       }
+    } catch (parseError) {
+      console.error('Error parsing wallet file:', parseError);
+      return NextResponse.json({ data: [] });
     }
     
-    console.log(`Found ${walletData.length} tokens in wallet data`);
+    console.log(`Found ${walletData.tokens.length} tokens in wallet data`);
     
     // Transform wallet data to portfolio format
     // Using the correct fields from the wallet data
-    const portfolioData = walletData
+    const portfolioData = walletData.tokens
       .filter((token: any) => token && typeof token === 'object' && !token.tokenIsNFT) // Filter out NFTs and ensure valid objects
       .map((token: any, index: number) => {
-        // Use valueStableCoin if available, otherwise calculate based on price
-        const price = token.price || 0;
-        const totalActualPrice = token.valueStableCoin || (price * token.balance) || 0;
+        // S'assurer que nous avons un prix valide
+        const price = token.price !== undefined && token.price !== null ? token.price : 0;
+        
+        // S'assurer que nous avons une balance valide
+        const balance = token.balance !== undefined && token.balance !== null ? token.balance : 0;
+        
+        // Calculer la valeur du token (price * balance)
+        let tokenValue;
+        
+        // Utiliser valueStableCoin si disponible
+        if (token.valueStableCoin !== undefined && token.valueStableCoin !== null) {
+          tokenValue = token.valueStableCoin;
+        } 
+        // Sinon, utiliser value si disponible
+        else if (token.value !== undefined && token.value !== null) {
+          tokenValue = token.value;
+        } 
+        // Sinon, calculer la valeur (price * balance)
+        else {
+          tokenValue = price * balance;
+        }
         
         // Use average price if available, otherwise use current price
         const averagePrice = token.averagePrice || price;
-        const totalPrice = averagePrice * token.balance || totalActualPrice;
+        const totalPrice = averagePrice * balance || tokenValue;
+        
+        console.log(`Token ${token.symbol || 'Unknown'}: price=${price}, balance=${balance}, value=${tokenValue}`);
         
         return {
           _id: (index + 1).toString(),
@@ -122,13 +152,17 @@ export async function GET(request: NextRequest) {
           mint: token.mint, // Include mint address
           actualPrice: price,
           averagePrice: averagePrice,
-          numberCoin: token.balance || 0,
+          numberCoin: balance,
           name: token.name || token.symbol || 'Unknown',
           logo: token.logo || '',
           exchange: token.priceSource ? [token.priceSource.toLowerCase()] : ['unknown'],
-          totalActualPrice: totalActualPrice,
+          totalActualPrice: tokenValue,
           totalPrice: totalPrice,
-          dateImport: new Date().toISOString()
+          dateImport: new Date().toISOString(),
+          // Ajouter explicitement les champs pour le composant Portfolio
+          price: price,
+          value: tokenValue,
+          valueStableCoin: tokenValue // Ajouter ce champ pour compatibilité
         };
       });
     

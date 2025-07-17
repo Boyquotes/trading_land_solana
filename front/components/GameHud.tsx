@@ -1,38 +1,30 @@
 /* eslint-disable react/jsx-no-undef */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Joystick } from 'react-joystick-component'
-import axios from 'axios'
 import { Game } from '@/game/Game'
 import Link from 'next/link'
 import { SerializedMessageType } from '@shared/network/server/serialized'
 import { MessageComponent } from '@shared/component/MessageComponent'
-import { Maximize } from 'lucide-react'
 import Image from 'next/image'
 import { MicroGameCard } from './GameCard'
 import { GameInfo } from '@/types'
 import gameData from '../public/gameData.json'
 import { VehicleSystem } from '../game/ecs/system/VehicleSystem.js'
-import { createSolanaClient, GetTokenAccountBalanceApi } from "gill";
-import { address } from "@solana/kit";
-import { Connection, GetProgramAccountsFilter, PublicKey, clusterApiUrl, ParsedAccountData } from "@solana/web3.js";
-import { ENV, TokenListProvider, TokenInfo } from '@solana/spl-token-registry';
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { Metaplex } from '@metaplex-foundation/js';
-import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
-import {
-  Metadata,
-  findMetadataPda,
-} from '@metaplex-foundation/mpl-token-metadata';
-import { PythHttpClient, getPythClusterApiUrl } from "@pythnetwork/client";
+import { Connection, PublicKey } from "@solana/web3.js";
 
-// Extend the Window interface to include wallet providers
-declare global {
-  interface Window {
-    phantom?: any;
-    solflare?: any;
-    backpack?: any;
-  }
-}
+// Import extracted components
+import {
+  PricesTable,
+  Portfolio,
+  Notifications,
+  AudioControls,
+  ChatBox,
+  WalletConnector,
+  WalletDropdown,
+  RecentTrades,
+  WalletTransactions,
+  CoinCounter
+} from './hud'
 
 export interface GameHudProps {
   messages: MessageComponent[]
@@ -40,98 +32,32 @@ export interface GameHudProps {
   gameInstance: Game
 }
 
-// Prices Table Component
-function PricesTable() {
-  const [prices, setPrices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Symbols to exclude from display
-  const excludedSymbols = ['CRO', 'AAVE', 'DAI', 'UNI', 'LINK', 'USDC', 'ETH', 'USDT', 'GT', 'FDUSD'];
-
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        setLoading(true);
-        // Use the local API proxy instead of directly calling the external API
-        const response = await axios.get('/api/prices');
-        
-        // Filter out excluded symbols and get first 30 items
-        const filteredItems = response.data.data
-          .filter((item: any) => !excludedSymbols.includes(item.symbol))
-          .slice(0, 30);
-          
-        setPrices(filteredItems);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching prices:', err);
-        setError('Failed to load prices data');
-        setLoading(false);
-      }
-    };
-
-    fetchPrices();
-    
-    // Refresh data every 60 seconds
-    const intervalId = setInterval(fetchPrices, 60000);
-    
-    return () => clearInterval(intervalId);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center py-4">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-red-400 text-sm py-2">{error}</div>
-    );
-  }
-
-  return (
-    <table className="w-full text-sm text-left text-white">
-      <thead className="text-xs uppercase bg-gray-700 bg-opacity-50">
-        <tr>
-          <th scope="col" className="px-2 py-1">Symbol</th>
-          <th scope="col" className="px-2 py-1">Price (USD)</th>
-          <th scope="col" className="px-2 py-1">1h %</th>
-        </tr>
-      </thead>
-      <tbody>
-        {prices.length > 0 ? (
-          prices.map((price, index) => (
-            <tr key={index} className="border-b border-gray-700 border-opacity-50 hover:bg-gray-600 hover:bg-opacity-30">
-              <td className="px-2 py-1 font-medium">{price.symbol}</td>
-              <td className="px-2 py-1">${Number(price.price_usd).toFixed(2)}</td>
-              <td className={`px-2 py-1 ${Number(price.percentChange1h) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {Number(price.percentChange1h) >= 0 ? '+' : ''}{Number(price.percentChange1h).toFixed(2)}%
-              </td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td colSpan={3} className="px-2 py-4 text-center">No trades available</td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
-}
-
 export default function GameHud({
   messages: messageComponents,
   sendMessage,
   gameInstance,
 }: GameHudProps) {
-  // ...existing code...
-
-  const [entities, setEntities] = useState<any[]>([]); // Store ECS entities
+  const [entities, setEntities] = useState<any[]>([]);
   const vehicleSystem = new VehicleSystem();
-
+  
+  // State for UI components
+  const [isPricesBoxExpanded, setIsPricesBoxExpanded] = useState<boolean>(false);
+  const [isTradesBoxExpanded, setIsTradesBoxExpanded] = useState<boolean>(false);
+  const [isPortfolioBoxExpanded, setIsPortfolioBoxExpanded] = useState<boolean>(false);
+  
+  // State for notifications
+  const [notifications, setNotifications] = useState<
+    Array<{ id: number; content: string; author: string; timestamp: number }>
+  >([]);
+  
+  // State for wallet
+  const [addresses, setAddresses] = useState<string[]>([]);
+  const [wallet, setWallet] = useState<{[address: string]: Array<{mint: string, balance: number, name?: string | null, symbol?: string | null, logo?: string | null, tokenIsNFT?: boolean, valueStableCoin?: number | null}>}>({});
+  
+  // Initialize Solana connection
+  const rpcEndpoint = process.env.NEXT_PUBLIC_RPC_URL;
+  const solanaConnection = new Connection(rpcEndpoint);
+  
   // Helper to add a vehicle entity
   function addWoodCubeEntity() {
     // Send a SPAWN_CUBE message to the server via websocket
@@ -148,1759 +74,187 @@ export default function GameHud({
       console.warn('[WoodCubeDebug] gameInstance.websocketManager not found');
     }
   }
-  // Loading state for each address
-  const [loadingPortfolio, setLoadingPortfolio] = useState<{[address: string]: boolean}>({});
-  // Track live token count per address
-  const [liveTokenCount, setLiveTokenCount] = useState<{[address: string]: number}>({});
-
-  // Track token prices by mint address
-  const [tokenPrices, setTokenPrices] = useState<{[mint: string]: number | null}>({});
-  // Track price loading state per wallet
-  const [loadingPrice, setLoadingPrice] = useState<{[address: string]: boolean}>({});
-
-  // Track last CoinGecko API call time to implement rate limiting
-  const [lastCoinGeckoCall, setLastCoinGeckoCall] = useState<number>(0);
+  // addWoodCubeEntity()
+  // Use the WalletConnector hook
+  const {
+    detectedWallets,
+    walletDropdownOpen,
+    walletDropdownRef,
+    loadingPortfolio,
+    loadingPrice,
+    liveTokenCount,
+    handleWalletConnect,
+    disconnectWallet,
+    checkPortfolio,
+    refreshTokenPrices,
+    setWalletDropdownOpen
+  } = WalletConnector({
+    onAddressesChange: setAddresses,
+    onWalletChange: setWallet,
+    setNotifications,
+    gameInstance
+  });
   
-  // State to track if prices box is expanded or collapsed
-  const [isPricesBoxExpanded, setIsPricesBoxExpanded] = useState<boolean>(false);
-  
-  // State to track if trades box is expanded or collapsed
-  const [isTradesBoxExpanded, setIsTradesBoxExpanded] = useState<boolean>(false);
-  
-  // State to track if Drift trades are visible
-  const [isDriftTradesVisible, setIsDriftTradesVisible] = useState<boolean>(true);
-  
-  // State to track if portfolio box is expanded or collapsed
-  const [isPortfolioBoxExpanded, setIsPortfolioBoxExpanded] = useState<boolean>(false);
-  
-  // Portfolio data state
-  const [portfolioData, setPortfolioData] = useState<Array<{
-    _id: string;
-    symbol: string;
-    mint: string;
-    actualPrice: number;
-    averagePrice: number;
-    numberCoin: number;
-    name: string;
-    logo: string;
-    exchange: string[];
-    totalActualPrice: number;
-    totalPrice: number;
-    dateImport: string;
-  }>>([]);
-  
-  // Loading state for portfolio data
-  const [loadingPortfolioData, setLoadingPortfolioData] = useState<boolean>(false);
-  
-  // Calculate total portfolio value
-  const totalPortfolioValue = useMemo(() => {
-    return portfolioData.reduce((total, item) => total + item.totalActualPrice, 0).toFixed(2);
-  }, [portfolioData]);
-
-  // Fetch portfolio data from API
-  useEffect(() => {
-    const fetchPortfolioData = async (walletAddress?: string) => {
-      try {
-        setLoadingPortfolioData(true);
-        // Use the address parameter if provided
-        const url = walletAddress 
-          ? `/api/portfolio?address=${walletAddress}` 
-          : '/api/portfolio';
-        
-        console.log(`Fetching portfolio data from: ${url}`);
-        const response = await axios.get(url);
-        setPortfolioData(response.data.data);
-      } catch (error) {
-        console.error('Error fetching portfolio data:', error);
-        // Set a notification about the error
-        const notifId = Date.now();
-        setNotifications([{ 
-          id: notifId, 
-          content: `Failed to load portfolio data`, 
-          author: "System", 
-          timestamp: notifId 
-        }]);
-        setTimeout(() => {
-          setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-        }, 5000);
-      } finally {
-        setLoadingPortfolioData(false);
-      }
-    };
-
-    // Start with no specific address
-    // fetchPortfolioData();
-    
-    // Add this function to the component's scope so it can be called elsewhere
-    // For example, when a user selects a specific wallet
-    // Define the type properly to avoid TypeScript errors
-    interface CustomWindow extends Window {
-      fetchWalletPortfolio?: (address?: string) => Promise<void>;
-    }
-    
-    // Assign the function to the window object
-    (window as CustomWindow).fetchWalletPortfolio = fetchPortfolioData;
-  }, []);
-
-  // Fetch price for a CoinGecko ID with rate limiting to avoid 429 Too Many Requests errors
-  async function fetchTokenPrice(coinGeckoId: string): Promise<number | null> {
-    try {
-      // Implement rate limiting for CoinGecko API
-      const now = Date.now();
-      const timeSinceLastCall = now - lastCoinGeckoCall;
-      const minimumInterval = 6500; // At least 6.1 seconds between calls (CoinGecko free tier limit is ~10 calls per minute)
-      
-      // If we need to wait before making another call
-      if (timeSinceLastCall < minimumInterval) {
-        const waitTime = minimumInterval - timeSinceLastCall;
-        console.log(`Rate limiting CoinGecko API - waiting ${waitTime}ms before next call`);
-        await sleep(waitTime);
-      }
-      
-      // Update the last call time
-      setLastCoinGeckoCall(Date.now());
-      
-      // Make the API call with error handling
-      console.log(`Fetching CoinGecko price for: ${coinGeckoId}`);
-      const res = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoId}&vs_currencies=usd`);
-      
-      if (res.status === 429) {
-        console.error("CoinGecko rate limit exceeded (429 error). Implementing longer delay.");
-        await sleep(10000); // 10 second cooldown if we hit the rate limit
-        return null;
-      }
-      
-      return res.data[coinGeckoId]?.usd ?? null;
-    } catch (error) {
-      // Check if error is specifically a rate limit error
-      if (axios.isAxiosError(error) && error.response?.status === 429) {
-        console.error("CoinGecko rate limit exceeded (429 error). Need to wait longer between requests.");
-      } else {
-        console.error("Error fetching price from CoinGecko:", error);
-      }
-      return null;
-    }
-  }
-
-  // Helper function to get price from Jupiter API
-  async function getJupiterPrice(mintAddress: string): Promise<number | null> {
-    try {
-      // Type validation to ensure mintAddress is a string
-      if (!mintAddress || typeof mintAddress !== 'string') {
-        console.warn('Invalid mintAddress passed to getJupiterPrice:', mintAddress);
-        return null;
-      }
-
-      // Jupiter API endpoint for price data
-      const jupiterPriceEndpoint = `https://price.jup.ag/v4/price?ids=${mintAddress}`;
-      
-      // Make the API call with error handling
-      console.log(`Fetching Jupiter price for: ${mintAddress}`);
-      
-      // Use a timeout to prevent hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-      
-      try {
-        const response = await axios.get(jupiterPriceEndpoint, {
-          signal: controller.signal,
-          validateStatus: (status) => {
-            // Consider any status code as successful to handle them manually
-            return true;
-          }
-        });
-        
-        // Clear the timeout since the request completed
-        clearTimeout(timeoutId);
-        
-        // Handle non-200 status codes
-        if (response.status !== 200) {
-          // Handle silently - just log the issue
-          console.warn(`Failed to fetch Jupiter price, status: ${response.status} for mint: ${mintAddress}`);
-          return null;
-        }
-        
-        // Extract price from Jupiter response
-        const priceData = response.data?.data?.[mintAddress];
-        if (priceData && typeof priceData.price === 'number') {
-          return priceData.price;
-        } else {
-          // Token exists in Jupiter but no price data available
-          console.warn(`Price information not found in Jupiter API for mintAddress: ${mintAddress}`);
-          return null;
-        }
-      } catch (innerError) {
-        // Clear the timeout to prevent memory leaks
-        clearTimeout(timeoutId);
-        
-        // Handle abort errors silently
-        if (innerError.name === 'AbortError') {
-          console.warn(`Jupiter API request timed out for mintAddress: ${mintAddress}`);
-          return null;
-        }
-        
-        // Handle other fetch errors silently
-        console.warn(`Error fetching from Jupiter API for mintAddress: ${mintAddress}`, innerError);
-        return null;
-      }
-    } catch (error) {
-      // Catch and handle any other unexpected errors silently
-      console.warn(`Failed to fetch price from Jupiter API for mintAddress: ${mintAddress}`, error);
-      return null;
-    }
-  }
-
-  // Helper function to get price from Binance API
-  async function getBinancePrice(symbol: string | null): Promise<number | null> {
-    try {
-      // Type validation to ensure symbol is a string
-      if (!symbol || typeof symbol !== 'string') {
-        console.warn('Invalid symbol passed to getBinancePrice:', symbol);
-        return null;
-      }
-
-      // Format the symbol for Binance API (append USDT and remove any spaces, make uppercase)
-      const formattedSymbol = `${symbol.replace(/\s+/g, '').toUpperCase()}USDT`;
-      
-      // First check if this market exists on Binance
-      try {
-        // Binance API endpoint for exchange info
-        const exchangeInfoEndpoint = 'https://api.binance.com/api/v3/exchangeInfo';
-        const exchangeInfoResponse = await axios.get(exchangeInfoEndpoint);
-        
-        if (exchangeInfoResponse.status !== 200) {
-          console.error(`Failed to fetch Binance exchange info, status: ${exchangeInfoResponse.status}`);
-          return null;
-        }
-        
-        // Check if the symbol exists in the available symbols
-        const symbolExists = exchangeInfoResponse.data.symbols.some(
-          (marketInfo: any) => marketInfo.symbol === formattedSymbol && marketInfo.status === 'TRADING'
-        );
-        
-        if (!symbolExists) {
-          console.warn(`Market ${formattedSymbol} does not exist on Binance or is not currently trading`);
-          return null;
-        }
-        
-        console.log(`Market ${formattedSymbol} exists on Binance, proceeding to fetch price`);
-      } catch (error) {
-        console.error('Error checking if market exists on Binance:', error);
-        // Continue with price fetch attempt even if market check fails
-      }
-      
-      // Binance API endpoint for price data
-      const binancePriceEndpoint = `https://api.binance.com/api/v3/ticker/price?symbol=${formattedSymbol}`;
-      
-      // Make the API call with error handling
-      console.log(`Fetching Binance price for: ${formattedSymbol}`);
-      const response = await axios.get(binancePriceEndpoint);
-      
-      if (response.status !== 200) {
-        console.error(`Failed to fetch Binance price, status: ${response.status}`);
-        return null;
-      }
-      
-      // Extract price from Binance response
-      if (response.data && typeof response.data.price === 'string') {
-        const price = parseFloat(response.data.price);
-        if (!isNaN(price)) {
-          return price;
-        }
-      }
-
-      console.warn(`Price information not found in Binance API for symbol: ${symbol}`);
-      return null;
-    } catch (error) {
-      // Check if error is specifically a Not Found error (symbol doesn't exist)
-      if (axios.isAxiosError(error) && error.response?.status === 400) {
-        console.warn(`Symbol ${symbol} not found on Binance API`);
-      } else {
-        console.error(`Failed to fetch price from Binance API for symbol: ${symbol}`, error);
-      }
-      return null;
-    }
-  }
-
-  // Refresh all token prices for a wallet
-  async function refreshTokenPrices(address: string) {
-    setLoadingPrice(prev => ({ ...prev, [address]: true }));
-    const tokens = wallet[address] || [];
-    const newPrices: {[mint: string]: number | null} = {};
-    
-    for (const token of tokens) {
-      console.log("Processing token:", token);
-      
-      // Skip NFTs - don't attempt to fetch price for NFTs
-      if (token.tokenIsNFT) {
-        console.log(`Skipping price fetch for NFT: ${token.name || token.mint}`);
-        newPrices[token.mint] = null;
-        continue;
-      }
-      
-      // Get token symbol if not already available
-      const symbol = token.symbol || await getTokenSymbolReturnSymbol(token.mint);
-
-      // Skip tokens with null symbol - can't fetch price without a symbol
-      if (symbol === null) {
-        console.log(`Skipping price fetch for token with null symbol: ${token.name || token.mint}`);
-        newPrices[token.mint] = null;
-        continue;
-      }
-      
-      let price = null;
-      let priceSource = "";
-      
-      // First try to get price from Binance using the token symbol
-      const binancePrice = await getBinancePrice(symbol);
-      if (binancePrice !== null) {
-        price = binancePrice;
-        priceSource = "Binance";
-        console.log(`${symbol.toUpperCase()} Price (USD) from Binance: $${price}`);
-      } else {
-        // Second, try CoinGecko if not available on Binance
-        const coinGeckoId = await findCoinGeckoId(symbol);
-        if (coinGeckoId) {
-          await sleep(500); // 500ms delay between requests to avoid rate limiting
-          price = await fetchTokenPrice(coinGeckoId);
-          priceSource = "CoinGecko";
-          console.log(`${symbol.toUpperCase()} Price (USD) from CoinGecko: $${price}`);
-        } else {
-          // Finally, fallback to Jupiter API if not available on Binance or CoinGecko
-          const jupiterPrice = await getJupiterPrice(token.mint);
-          if (jupiterPrice !== null) {
-            price = jupiterPrice;
-            priceSource = "Jupiter";
-            console.log(`${symbol.toUpperCase()} Price (USD) from Jupiter: $${price}`);
-          } else {
-            console.log(`No price found for ${symbol} on Binance, CoinGecko or Jupiter`);
-          }
-        }
-      }
-      
-      newPrices[token.mint] = price;
-      
-      // Update the token in the wallet with its price and symbol
-      const tokenIndex = wallet[address].findIndex(t => t.mint === token.mint);
-      if (tokenIndex !== -1) {
-        setWallet(prev => {
-          const newWallet = { ...prev };
-          // Calculate valueStableCoin (balance * price)
-          const valueStableCoin = price !== null ? token.balance * price : null;
-          const updatedToken = { 
-            ...newWallet[address][tokenIndex], 
-            price, 
-            symbol,
-            priceSource, // Store the source of the price data
-            valueStableCoin // Add the calculated value in USD
-          };
-          newWallet[address] = [
-            ...newWallet[address].slice(0, tokenIndex),
-            updatedToken,
-            ...newWallet[address].slice(tokenIndex + 1)
-          ];
-          return newWallet;
-        });
-      }
-      
-      await sleep(1000); // 1s delay between requests to avoid rate limiting
-    }
-    
-    // Merge newPrices into wallet for entries with matching address keys
-    setWallet(prev => {
-      const updatedWallet = { ...prev };
-      
-      // If this address exists in the wallet
-      if (updatedWallet[address]) {
-        // Update each token with its new price data and calculate valueStableCoin
-        updatedWallet[address] = updatedWallet[address].map(token => {
-          if (token.mint in newPrices) {
-            const price = newPrices[token.mint];
-            // Calculate valueStableCoin (balance * price)
-            const valueStableCoin = price !== null ? token.balance * price : null;
-            return {
-              ...token,
-              price,
-              valueStableCoin
-            };
-          }
-          return token;
-        });
-      }
-      console.log("Updated wallet:", updatedWallet);
-      return updatedWallet;
-    });
-    
-    // Store the prices in the tokenPrices state as well (for backward compatibility)
-    setTokenPrices(prev => ({ ...prev, ...newPrices }));
-    
-    // Count non-NFT tokens with prices for the notification
-    const tokensWithPrice = Object.entries(newPrices)
-      .filter(([mint, price]) => {
-        const token = wallet[address].find(t => t.mint === mint);
-        return price !== null && !token?.tokenIsNFT;
-      }).length;
-    
-    if (tokensWithPrice > 0) {
-      const notifId = Date.now();
-      setNotifications([{ 
-        id: notifId, 
-        content: `Updated prices for ${tokensWithPrice} token${tokensWithPrice !== 1 ? 's' : ''}`, 
-        author: "Price Oracle", 
-        timestamp: notifId 
-      }]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      }, 5000);
-    }
-    
-    setLoadingPrice(prev => ({ ...prev, [address]: false }));
-  }
-
-  // Get signatures for address using Solana web3.js
-  async function getSignaturesForAddress(address: string) {
-    console.log(`Getting signatures for address: ${address}`);
-    try {
-      // Create a PublicKey from the address string
-      const publicKey = new PublicKey(address);
-      
-      // Show loading notification
-      const loadingId = Date.now();
-      setNotifications([{ 
-        id: loadingId, 
-        content: `Fetching transaction history for ${address.slice(0, 4)}...${address.slice(-4)}`, 
-        author: "Solana Explorer", 
-        timestamp: loadingId 
-      }]);
-      
-      // We need to paginate to get 2000 transactions
-      let allSignatures: any[] = [];
-      let lastSignature = null;
-      let hasMore = true;
-      
-      // Loop until we have 2000 signatures or there are no more to fetch
-      while (allSignatures.length < 2000 && hasMore) {
-        // Prepare options for the API call
-        const options: any = { limit: 100 }; // Fetch 100 at a time (API limit)
-        if (lastSignature) {
-          options.before = lastSignature;
-        }
-        
-        // Get batch of signatures
-        const signaturesBatch = await solanaConnection.getSignaturesForAddress(publicKey, options);
-        
-        // If we got fewer than requested, we've reached the end
-        if (signaturesBatch.length < 100) {
-          hasMore = false;
-        }
-        
-        // Add this batch to our collection
-        allSignatures = [...allSignatures, ...signaturesBatch];
-        
-        // Update the loading notification
-        setNotifications([{ 
-          id: loadingId, 
-          content: `Fetched ${allSignatures.length} transactions so far...`, 
-          author: "Solana Explorer", 
-          timestamp: loadingId 
-        }]);
-        
-        // If we have more to fetch, set the last signature for pagination
-        if (hasMore && signaturesBatch.length > 0) {
-          lastSignature = signaturesBatch[signaturesBatch.length - 1].signature;
-        }
-      }
-      
-      // Clear the loading notification
-      setNotifications((prev) => prev.filter((n) => n.id !== loadingId));
-      
-      console.log(`Found ${allSignatures.length} signatures for address ${address}:`);
-      
-      // Find the earliest transaction (wallet creation date)
-      let earliestTransaction = null;
-      
-      for (const sig of allSignatures) {
-        if (sig.blockTime && (!earliestTransaction || sig.blockTime < earliestTransaction.blockTime)) {
-          earliestTransaction = sig;
-        }
-      }
-      
-      // Format and display the wallet creation date
-      let walletCreationDate = 'Unknown';
-      if (earliestTransaction && earliestTransaction.blockTime) {
-        const date = new Date(earliestTransaction.blockTime * 1000);
-        walletCreationDate = date.toLocaleString();
-        console.log('Wallet creation date (earliest transaction):', walletCreationDate);
-        console.log('Earliest transaction:', earliestTransaction);
-      }
-      
-      // Log each signature with its details (just the first 50 to avoid console overload)
-      allSignatures.slice(0, 50).forEach((sig, index) => {
-        console.log(`Signature ${index + 1}:`, {
-          signature: sig.signature,
-          slot: sig.slot,
-          blockTime: sig.blockTime ? new Date(sig.blockTime * 1000).toLocaleString() : 'unknown',
-          err: sig.err ? 'Failed' : 'Success',
-          memo: sig.memo || 'No memo',
-          confirmationStatus: sig.confirmationStatus
-        });
-      });
-      
-      // Add a notification to inform the user
-      const notifId = Date.now();
-      setNotifications([{ 
-        id: notifId, 
-        content: `Found ${allSignatures.length} transactions. Wallet creation: ${walletCreationDate}`, 
-        author: "Solana Explorer", 
-        timestamp: notifId 
-      }]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      }, 10000); // Show this one a bit longer
-      
-    } catch (error) {
-      console.error('Error getting signatures:', error);
-      
-      // Show error notification
-      const notifId = Date.now();
-      setNotifications([{ 
-        id: notifId, 
-        content: `Error fetching transaction history: ${error instanceof Error ? error.message : 'Unknown error'}`, 
-        author: "Solana Explorer", 
-        timestamp: notifId 
-      }]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      }, 5000);
-    }
-  }
-  
-  // Check portfolio for a single address
-  async function checkPortfolioForAddress(address: string) {
-    console.log(`Checking portfolio for address: ${address}`);
-    setLoadingPortfolio(prev => ({ ...prev, [address]: true }));
-    setLiveTokenCount(prev => ({ ...prev, [address]: 0 }));
-    let newWallet = { ...wallet };
-    let tokenAccounts: any[] = [];
-    let totalTokens = 0;
-    try {
-      // Custom getTokenAccounts logic to update live count
-      const filters: any[] = [
-        {
-          dataSize: 165,
-        },
-        {
-          memcmp: {
-            offset: 32,
-            bytes: address,
-          },
-        },
-      ];
-      const accounts = await solanaConnection.getParsedProgramAccounts(
-        TOKEN_PROGRAM_ID,
-        { filters: filters }
-      );
-      const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean; valueStableCoin?: number | null }> = [];
-      for (const [i, account] of accounts.entries()) {
-        if (i >= 4) break;
-        const parsedAccountInfo: any = account.account.data;
-        const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
-        const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
-        const decimals: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["decimals"];
-        const metadata = await getTokenMetadata(mintAddress);
-        console.log(metadata)
-        console.log(metadata?.symbol)
-        const tokenIsNFT = decimals === 0 && tokenBalance === 1;
-        // Initialize valueStableCoin as null - will be populated when prices are available
-        tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT, valueStableCoin: null });
-        setLiveTokenCount(prev => ({ ...prev, [address]: i + 1 }));
-
-        // --- SPAWN A COIN CUBE FOR THIS TOKEN ---
-        if (gameInstance?.websocketManager) {
-          const spawnCubeCoinMessage = {
-            t: 6, // ClientMessageType.SPAWN_CUBE_COIN
-            position: { x: i * 5, y: 10, z: 0 }, // Spread cubes along x axis
-            size: { width: 2, height: 2, depth: 2 },
-            color: '#00ff00', // Green color for coins
-            textureUrl: metadata?.logo || undefined, // Use token logo as texture if available
-            symbol: metadata?.symbol || 'TOKEN',
-            mintAddress: mintAddress
-          };
-          
-          try {
-            gameInstance.websocketManager.send(spawnCubeCoinMessage);
-            console.log('[WalletCoin] Sent SPAWN_CUBE_COIN for token', metadata?.symbol, mintAddress);
-          } catch (error) {
-            console.error('[WalletCoin] Failed to send SPAWN_CUBE_COIN message:', error);
-            
-            // Fallback to regular cube if message fails
-            try {
-              const fallbackMessage = {
-                t: 5, // ClientMessageType.SPAWN_CUBE
-                position: { x: i * 5, y: 10, z: 0 },
-                size: { width: 2, height: 2, depth: 2 },
-                color: '#deb887', // Wood color fallback
-              };
-              gameInstance.websocketManager.send(fallbackMessage);
-              console.log('[WalletCoin] Sent fallback SPAWN_CUBE message');
-            } catch (fallbackError) {
-              console.error('[WalletCoin] Even fallback message failed:', fallbackError);
-            }
-          }
-        }
-        // --- END SPAWN COIN CUBE ---
-
-        // Wait 550ms before next call
-        if (i < accounts.length - 1) {
-          await new Promise(res => setTimeout(res, 550));
-        }
-      }
-      totalTokens = tokens.length;
-      newWallet[address] = tokens;
-      setWallet(newWallet);
-      console.log(totalTokens);
-      console.log(newWallet);
-      // Show notification/toast to player
-      const notifId = Date.now();
-      setNotifications([{ id: notifId, content: `${totalTokens} token${totalTokens !== 1 ? 's' : ''} in this wallet!`, author: "Your Wallet", timestamp: notifId }]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      }, 5000);
-      
-      // Save wallet data to file in public/wallets/ directory
-      try {
-        // Format date as year-month-day-hh-mm-ss
-        const now = new Date();
-        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
-        
-        // Create a clean version of the wallet data to save (avoid circular references)
-        const walletData = {
-          address,
-          fetchedAt: now.toISOString(),
-          date: formattedDate,
-          totalTokens,
-          tokens: tokens.map(token => ({
-            mint: token.mint,
-            balance: token.balance,
-            name: token.name,
-            symbol: token.symbol,
-            logo: token.logo,
-            tokenIsNFT: token.tokenIsNFT,
-            valueStableCoin: token.valueStableCoin
-          }))
-        };
-        
-        // Use the API route to save the file on the server
-        const response = await fetch('/api/save-wallet', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            address,
-            walletData,
-            date: formattedDate
-          }),
-        });
-        
-        if (response.ok) {
-          console.log(`Wallet data saved for ${address}`);
-        } else {
-          console.error(`Failed to save wallet data: ${response.statusText}`);
-        }
-      } catch (fileError) {
-        console.error("Error saving wallet data to file:", fileError);
-      }
-    } finally {
-      setLoadingPortfolio(prev => ({ ...prev, [address]: false }));
-    }
-  }
-
-  // Wallet detection and state
-  const [detectedWallets, setDetectedWallets] = useState<Array<{id: string, name: string, logo: string}>>([]);
-
-  useEffect(() => {
-    const wallets = [];
-    if (typeof window !== 'undefined') {
-      if (window.phantom && window.phantom.solana) {
-        wallets.push({ id: 'phantom', name: 'Phantom', logo: '/wallet-phantom.png' });
-      }
-      if (window.solflare) {
-        wallets.push({ id: 'solflare', name: 'Solflare', logo: '/wallet-solflare.png' });
-      }
-      if (window.backpack) {
-        wallets.push({ id: 'backpack', name: 'Backpack', logo: '/wallet-backpack.png' });
-      }
-    }
-    setDetectedWallets(wallets);
-  }, []);
-
-  // Handler for wallet connect button
-  async function handleWalletConnect(walletId: string) {
-    let address = '';
-    let response;
-    try {
-      if (walletId === 'phantom' && window.phantom && window.phantom.solana) {
-        response = await window.phantom.solana.connect({ onlyIfTrusted: false });
-        address = response.publicKey.toString();
-      } else if (walletId === 'solflare' && window.solflare) {
-        const isConnected = await window.solflare.connect();
-        if (isConnected && window.solflare.publicKey) {
-          address = window.solflare.publicKey.toString();
-        } else {
-          return;
-        }
-      } else if (walletId === 'backpack' && window.backpack) {
-        response = await window.backpack.connect();
-        address = response.publicKey.toString();
-      } else {
-        // No wallet provider found
-        const notifId = Date.now();
-        setNotifications((prev) => [
-          ...prev,
-          { id: notifId, content: 'No supported wallet provider found', author: 'System', timestamp: notifId },
-        ]);
-        setTimeout(() => {
-          setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-        }, 5000);
-        return;
-      }
-    } catch (error) {
-      console.error('Not connected :', error);
-      return;
-    }
-
-    if (!address) return;
-    if (addresses.includes(address)) {
-      const notifId = Date.now();
-      setNotifications((prev) => [
-        ...prev,
-        { id: notifId, content: 'Wallet already register', author: 'System', timestamp: notifId },
-      ]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      }, 5000);
-      return;
-    }
-    if (addresses.length >= 3) {
-      const notifId = Date.now();
-      setNotifications((prev) => [
-        ...prev,
-        { id: notifId, content: 'You can only register 3 wallets. Disconnect one wallet before add a new.', author: 'System', timestamp: notifId },
-      ]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      }, 5000);
-      return;
-    }
-    setAddresses(prev => [...prev, address]);
-    console.log([...addresses, address]);
-    return [...addresses, address];
-  }
-  const [addresses, setAddresses] = useState<string[]>([]);
-  const [wallet, setWallet] = useState<{[address: string]: Array<{mint: string, balance: number}>}>({});
-  const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
-  const walletDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (walletDropdownRef.current && !walletDropdownRef.current.contains(event.target as Node)) {
-        setWalletDropdownOpen(false);
-      }
-    }
-    if (walletDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    } else {
-      document.removeEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [walletDropdownOpen]);
-
-  function disconnectWallet(addressToRemove: string) {
-    setAddresses(prev => prev.filter(addr => addr !== addressToRemove));
-    // Optionally, also remove from wallet state
-    setWallet(prev => {
-      const newWallet = { ...prev };
-      delete newWallet[addressToRemove];
-      return newWallet;
-    });
-  }
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const refContainer = useRef<HTMLDivElement>(null)
-  const [notifications, setNotifications] = useState<
-    Array<{ id: number; content: string; author: string; timestamp: number }>
-  >([])
-  const processedMessagesRef = useRef<Set<number>>(new Set())
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const rpcEndpoint = process.env.NEXT_PUBLIC_RPC_URL;
-  const solanaConnection = new Connection(rpcEndpoint);
-  
-  // State: Map wallet address to tokens array
-  const [tokenAccountsByWallet, setTokenAccountsByWallet] = useState<{ [wallet: string]: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null }> }>({});
-
-  async function getTokenAccounts(walletAddress: string, solanaConnection: Connection) {
-    const filters: GetProgramAccountsFilter[] = [
-      {
-        dataSize: 165, // size of account (bytes)
-      },
-      {
-        memcmp: {
-          offset: 32, // location of our query in the account (bytes)
-          bytes: walletAddress, // our search criteria, a base58 encoded string
-        },
-      },
-    ];
-    const accounts = await solanaConnection.getParsedProgramAccounts(
-      TOKEN_PROGRAM_ID,
-      { filters: filters }
-    );
-    console.log(`Found ${accounts.length} token account(s) for wallet ${walletAddress}.`);
-
-    // For each token account, get mint address and call getTokenMetadata
-    // for (const account of accounts) {
-    //   const parsedAccountInfo: any = account.account.data;
-    //   const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
-    //   // Call getTokenMetadata and log the result
-    //   const metadata = await getTokenMetadata(mintAddress);
-    //   console.log('Token metadata:', metadata);
-    // }
-    // Build tokens array with metadata, with delay between calls
-    const tokens: Array<{ mint: string; balance: number; name?: string | null; symbol?: string | null; logo?: string | null; tokenIsNFT?: boolean }> = [];
-    for (const [i, account] of accounts.entries()) {
-      // Parse the account data
-      const parsedAccountInfo: any = account.account.data;
-      const mintAddress: string = parsedAccountInfo["parsed"]["info"]["mint"];
-      const tokenBalance: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["uiAmount"];
-      const decimals: number = parsedAccountInfo["parsed"]["info"]["tokenAmount"]["decimals"];
-      // Get token metadata with 550ms delay
-      const metadata = await getTokenMetadata(mintAddress);
-      // Heuristic: NFT if decimals === 0 and balance === 1
-      const tokenIsNFT = decimals === 0 && tokenBalance === 1;
-      // Log results
-      console.log(`Token Account No. ${i + 1}: ${account.pubkey.toString()}`);
-      tokens.push({ mint: mintAddress, balance: tokenBalance, ...metadata, tokenIsNFT });
-      // Wait 550ms before next call
-      if (i < accounts.length - 1) {
-        await new Promise(res => setTimeout(res, 550));
-      }
-    }
-    // Store in state by wallet address
-    setTokenAccountsByWallet(prev => ({ ...prev, [walletAddress]: tokens }))
-    console.log("tokenAccountsByWallet")
-    
-    return tokens;
-  }
-
-  async function getTokenInfo(mintAddress: string) {
-    // Connect to the Solana devnet (you can change to 'mainnet-beta' for mainnet)
-    // const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-  
-    // The public key of the token mint address
-    const tokenMintAddress = new PublicKey(mintAddress);
-  
-    // Get token supply and decimals
-    const tokenAccountInfo = await solanaConnection.getParsedAccountInfo(tokenMintAddress);
-  
-    if (tokenAccountInfo.value === null) {
-      console.log('Token mint not found!');
-      return;
-    }
-    console.log(tokenAccountInfo.value.data);
-    const info = tokenAccountInfo.value?.data?.parsed?.info;
-    if (!info) {
-      console.log('Token info not found!');
-      return;
-    }
-    const { mintAuthority, supply, decimals, symbol } = info;
-  
-    console.log(`Mint Authority: ${mintAuthority}`);
-    console.log(`Symbol: ${symbol}`);
-    console.log(`Supply: ${supply}`);
-    console.log(`Decimals: ${decimals}`);
-  }
-
-  async function getTokenSymbol(mintAddress: string): Promise<void> {
-    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-    const tokenMintAddress = new PublicKey(mintAddress);
-  
-    // Récupération des infos du token
-    const tokenAccountInfo = await connection.getParsedAccountInfo(tokenMintAddress);
-    console.log(tokenAccountInfo)
-  
-    if (tokenAccountInfo.value === null) {
-      console.log('Token mint not found!');
-      return;
-    }
-  
-    const data = tokenAccountInfo.value.data as ParsedAccountData;
-    const info = data?.parsed?.info;
-    if (!info) {
-      console.log('Token info not found!');
-      return;
-    }
-    const { mintAuthority, supply, decimals } = info;
-  
-    console.log(`Mint Authority: ${mintAuthority}`);
-    console.log(`Supply: ${supply}`);
-    console.log(`Decimals: ${decimals}`);
-  
-    // Récupération des métadonnées du token
-    const tokenListProvider = new TokenListProvider();
-    const tokenList = await tokenListProvider.resolve();
-    const tokenListData: TokenInfo[] = tokenList.getList();
-  
-    const tokenInfo = tokenListData.find(
-      (token) => token.address === mintAddress
-    );
-  
-    if (tokenInfo) {
-      console.log(`Symbol: ${tokenInfo.symbol}`);
-      console.log(`Logo URI: ${tokenInfo.logoURI}`);
-    } else {
-      console.log('Token metadata not found in the token list.');
-    }
-  }
-
-  async function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // Refactored: returns price
-// Memoized CoinGecko coins list
-const [coinGeckoCoins, setCoinGeckoCoins] = useState<any[] | null>(null);
-
-useEffect(() => {
-  async function fetchCoinGeckoCoins() {
-    try {
-      const url = 'https://api.coingecko.com/api/v3/coins/list';
-      const res = await fetch(url);
-      const coins = await res.json();
-      setCoinGeckoCoins(coins);
-    } catch (err) {
-      console.error('Failed to fetch CoinGecko coins list:', err);
-      setCoinGeckoCoins([]);
-    }
-  }
-  if (coinGeckoCoins === null) {
-    fetchCoinGeckoCoins();
-  }
-}, [coinGeckoCoins]);
-
-async function findCoinGeckoId(symbol: string | null | undefined): Promise<string | null> {
-  if (!coinGeckoCoins) {
-    // Not loaded yet
-    console.log('CoinGecko coins list not loaded yet');
-    return null;
-  }
-  if (!symbol || typeof symbol !== 'string') {
-    // Invalid symbol
-    console.log('Invalid symbol passed to findCoinGeckoId:', symbol);
-    return null;
-  }
-  
-  // Find the coin by matching the symbol (case-insensitive)
-  const match = coinGeckoCoins.find((coin: any) => coin.symbol && coin.symbol.toLowerCase() === symbol.toLowerCase());
-  
-  if (!match) {
-    console.log(`No CoinGecko ID found for symbol: ${symbol}`);
-    return null;
-  }
-  
-  // Return the 'id' field instead of the 'symbol' field
-  // The 'id' field is what the CoinGecko API expects (e.g., "bitcoin", "solana", etc.)
-  console.log(`Found CoinGecko ID for ${symbol}: ${match.id}`);
-  return match.id; // Return the ID, not the symbol
-}
-
-  async function checkPortfolio() {
-  if (addresses.length > 0) {
-    console.log("checkPortfolio");
-    console.log(addresses);
-    console.log(wallet);
-    
-    let newWallet = { ...wallet };
-    let totalTokens = 0;
-    for (const address of addresses) {
-      let tokenAccounts = await getTokenAccounts(address, solanaConnection);
-      newWallet[address] = tokenAccounts;
-      totalTokens += tokenAccounts.length;
-    }
-    console.log("newWallet");
-    console.log(newWallet);
-    setWallet(newWallet);
-    console.log(newWallet);
-    // Show notification/toast to player
-    const notifId = Date.now();
-    setNotifications([{ id: notifId, content: `${totalTokens} token${totalTokens !== 1 ? 's' : ''} in your wallet!`, author: "Your Wallet", timestamp: notifId }]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    }, 5000);
-  }
-}
-
-async function checkPricePortfolio(wallet: { [address: string]: Array<{ mint: string; balance: number; symbol?: string | null; price?: number | null; tokenIsNFT?: boolean }> }) {
-  console.log("checkPricePortfolio");
-  console.log(wallet);
-
-  // If wallet is empty but addresses exist, auto-populate first
-  if (Object.keys(wallet).length === 0 && addresses.length > 0) {
-    console.log("Wallet empty, calling checkPortfolio first...");
-    await checkPortfolio();
-  }
-
-  // Copy wallet to mutate
-  let newWallet = { ...wallet };
-
-  for (const address in wallet) {
-    // Map over tokens to update price
-    console.log("address");
-    console.log(address);
-
-    const updatedTokens = await Promise.all(
-      wallet[address].map(async (token) => {
-        // Skip NFTs - don't attempt to fetch price for NFTs
-        if (token.tokenIsNFT) {
-          console.log(`Skipping price fetch for NFT: ${token.name || token.mint}`);
-          return { ...token, price: null, priceSource: "N/A - NFT", valueStableCoin: null };
-        }
-
-        const symbol = token.symbol || await getTokenSymbolReturnSymbol(token.mint);
-        
-        // Skip tokens with null symbol - can't fetch price without a symbol
-        if (symbol === null) {
-          console.log(`Skipping price fetch for token with null symbol: ${token.name || token.mint}`);
-          return { ...token, price: null, priceSource: "N/A - No Symbol", valueStableCoin: null };
-        }
-
-        let price = null;
-        let priceSource = "";
-
-        // First try to get price from Binance using the token symbol
-        const binancePrice = await getBinancePrice(symbol);
-        if (binancePrice !== null) {
-          price = binancePrice;
-          priceSource = "Binance";
-          console.log(`${symbol.toUpperCase()} Price (USD) from Binance: $${price}`);
-        } else {
-          // Second, try CoinGecko if not available on Binance
-          const coinGeckoId = await findCoinGeckoId(symbol);
-          if (coinGeckoId) {
-            price = await fetchTokenPrice(coinGeckoId);
-            priceSource = "CoinGecko";
-            console.log(`${symbol.toUpperCase()} Price (USD) from CoinGecko: $${price}`);
-          } else {
-            // Finally, fallback to Jupiter API if not available on Binance or CoinGecko
-            const jupiterPrice = await getJupiterPrice(token.mint);
-            if (jupiterPrice !== null) {
-              price = jupiterPrice;
-              priceSource = "Jupiter";
-              console.log(`${symbol.toUpperCase()} Price (USD) from Jupiter: $${price}`);
-            } else {
-              console.log(`No price found for ${symbol} on Binance, CoinGecko or Jupiter`);
-            }
-          }
-        }
-
-        // Calculate valueStableCoin (balance * price) if we have a price
-        const valueStableCoin = price !== null ? token.balance * price : null;
-
-        return { ...token, symbol, price, priceSource, valueStableCoin };
-      })
-    );
-
-    newWallet[address] = updatedTokens;
-  }
-
-  setWallet(newWallet);
-  
-  // Count non-NFT tokens with prices for the notification
-  const totalTokens = Object.values(newWallet).reduce((count, tokens) => 
-    count + tokens.filter(token => token.price !== null && token.price !== undefined && !token.tokenIsNFT).length, 0);
-  
-  if (totalTokens > 0) {
-    const notifId = Date.now();
-    setNotifications([{ 
-      id: notifId, 
-      content: `Updated prices for ${totalTokens} token${totalTokens !== 1 ? 's' : ''}`, 
-      author: "Price Oracle", 
-      timestamp: notifId 
-    }]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    }, 5000);
-  }
-}
-
-// Helper: getTokenSymbol but returns the symbol string
-async function getTokenSymbolReturnSymbol(mintAddress: string): Promise<string | null> {
-  const tokenMintAddress = new PublicKey(mintAddress);
-  const tokenAccountInfo = await solanaConnection.getParsedAccountInfo(tokenMintAddress);
-  if (tokenAccountInfo.value === null) {
-    console.log('Token mint not found!');
-    return null;
-  }
-  const data = tokenAccountInfo.value.data as ParsedAccountData;
-  // Try to get symbol from token list
-  const tokenListProvider = new TokenListProvider();
-  const tokenList = await tokenListProvider.resolve();
-  const tokenListData: TokenInfo[] = tokenList.getList();
-  const tokenInfo = tokenListData.find((token) => token.address === mintAddress);
-  if (tokenInfo) {
-    return tokenInfo.symbol;
-  } else {
-    console.log('Token metadata not found in the token list.');
-    return null;
-  }
-}
-
-async function connectSolana() {
-  // ...existing code...
-
-  let address = '';
-  let response;
-  console.log("window");
-  console.log(window);
-  // Try Phantom
-  if (window.phantom) {
-    try {
-      response = await window.phantom.solana.connect({ onlyIfTrusted: false });
-      address = response.publicKey.toString();
-    } catch (error) {
-      console.error("Not connected :", error);
-      return;
-    }
-  } else if (window.solflare) {
-    try {
-      const isConnected = await window.solflare.connect();
-      if (isConnected && window.solflare.publicKey) {
-        address = window.solflare.publicKey.toString();
-      } else {
-        return;
-      }
-    } catch (error) {
-      console.error("Not connected :", error);
-      return;
-    }
-  } else if (window.backpack) {
-    try {
-      response = await window.backpack.connect();
-      address = response.publicKey.toString();
-    } catch (error) {
-      console.error("Not connected :", error);
-      return;
-    }
-  } else {
-    // No wallet provider found
-    const notifId = Date.now();
-    setNotifications((prev) => [
-      ...prev,
-      { id: notifId, content: 'No supported wallet provider found', author: 'System', timestamp: notifId },
-    ]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    }, 5000);
-    return;
-  }
-
-  if (!address) return;
-  if (addresses.includes(address)) {
-    const notifId = Date.now();
-    setNotifications((prev) => [
-      ...prev,
-      { id: notifId, content: 'Wallet already register', author: 'System', timestamp: notifId },
-    ]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    }, 5000);
-    return;
-  }
-  if (addresses.length >= 3) {
-    const notifId = Date.now();
-    setNotifications((prev) => [
-      ...prev,
-      { id: notifId, content: 'You can only register 3 wallets. Disconnect one wallet before add a new.', author: 'System', timestamp: notifId },
-    ]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    }, 5000);
-    return;
-  }
-  setAddresses(prev => [...prev, address]);
-  console.log([...addresses, address]);
-  // Add a wood cube to the game when wallet connects
-  addWoodCubeEntity();
-  return [...addresses, address];
-}
-
   // Handle notifications from chat messages
   useEffect(() => {
-    if (!messageComponents || messageComponents.length === 0) return
-
-    // Process new messages for notifications
-    messageComponents.forEach((messageComponent, index) => {
-      const messageType = messageComponent.messageType
-      const messageId = messageComponent.timestamp
-
-      // Skip if we've already processed this message
-      if (processedMessagesRef.current.has(messageId)) {
-        return
-      }
-
-      // Only process global notifications
-      // Check if the message is a notification type
-      if (
-        messageType === SerializedMessageType.GLOBAL_NOTIFICATION ||
-        (messageType === SerializedMessageType.TARGETED_NOTIFICATION &&
-          gameInstance?.currentPlayerEntityId &&
-          messageComponent.targetPlayerIds?.includes(gameInstance?.currentPlayerEntityId))
-      ) {
-        // Mark as processed
-        processedMessagesRef.current.add(messageId)
-
-        // Add new notification
-        const newNotification = {
-          id: Date.now() + index, // Unique ID
-          content: messageComponent.content,
-          author: messageComponent.author,
-          timestamp: Date.now(),
-        }
-
-        // Only show one at a time for now
-        setNotifications([newNotification])
-
-        // Remove notification after 5 seconds
+    // Use the messages prop that was destructured in the component parameters
+    // The prop was renamed to messageComponents in the destructuring
+    if (messageComponents && messageComponents.length > 0) {
+      // Get the most recent message
+      const latestMessage = messageComponents[messageComponents.length - 1];
+      
+      // Only process system messages or messages from other players (not from the current player)
+      if (latestMessage && latestMessage.type !== SerializedMessageType.PLAYER) {
+        // Create a notification from the message
+        const notifId = Date.now();
+        setNotifications(prev => [
+          ...prev,
+          {
+            id: notifId,
+            content: latestMessage.content,
+            author: latestMessage.author || 'System',
+            timestamp: notifId
+          }
+        ]);
+        
+        // Auto-remove the notification after 5 seconds
         setTimeout(() => {
-          setNotifications((prev) => prev.filter((n) => n.id !== newNotification.id))
-        }, 5000)
+          setNotifications(prev => prev.filter(n => n.id !== notifId));
+        }, 5000);
       }
-    })
-  }, [messageComponents, gameInstance?.currentPlayerEntityId])
-
-  // Memoize tokenList and tokenMap for efficient lookup
-  const [tokenList, setTokenList] = useState<TokenInfo[]>([]);
-  const [tokenMap, setTokenMap] = useState<Map<string, TokenInfo>>(new Map());
-
-  useEffect(() => {
-    async function fetchTokenList() {
-      const provider = await new TokenListProvider().resolve();
-      const list = provider.filterByChainId(ENV.MainnetBeta).getList();
-      setTokenList(list);
-      setTokenMap(
-        list.reduce((map, item) => {
-          map.set(item.address, item);
-          return map;
-        }, new Map<string, TokenInfo>())
-      );
     }
-    fetchTokenList();
-  }, []);
-
-  async function getTokenMetadata(mintStrAddress: string): Promise<{ name: string | null, symbol: string | null, logo: string | null }> {
-    const metaplex = Metaplex.make(solanaConnection);
+  }, [messageComponents]);
   
-    const mintAddress = new PublicKey(mintStrAddress);
-  
-    // 1. Try to get from tokenMap (fast, no network)
-    const token = tokenMap.get(mintAddress.toBase58());
-    if (token) {
-      return {
-        name: token.name || null,
-        symbol: token.symbol || null,
-        logo: token.logoURI || null
-      };
-    }
-  
-    // 2. Fallback: query Metaplex metadata (network request)
-    const metadataAccount = metaplex.nfts().pdas().metadata({ mint: mintAddress });
-  
-    const metadataAccountInfo = await solanaConnection.getAccountInfo(metadataAccount);
-  
-    if (metadataAccountInfo) {
-      console.log("found")
-      const tokenMeta = await metaplex.nfts().findByMint({ mintAddress: mintAddress });
-      return {
-        name: tokenMeta.name || null,
-        symbol: tokenMeta.symbol || null,
-        logo: tokenMeta.json?.image || null
-      };
-    } else {
-      console.log("not found")
-      return { name: null, symbol: null, logo: null };
-    }
-  }
-
-  // Mute state for sound
-  const [isMuted, setIsMuted] = useState(false);
-
-  // Sync mute state with MeshSystem
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      console.log('[Sound Debug] GameHud setting mute state:', isMuted);
-      const evt = new CustomEvent('setMuteState', { detail: isMuted });
-      window.dispatchEvent(evt);
-    }
-  }, [isMuted]);
-
-  const handleMuteClick = () => {
-    console.log('[Sound Debug] Mute button clicked, current state:', isMuted);
-    if (typeof window.stopAllSounds === 'function') {
-      console.log('[Sound Debug] Calling stopAllSounds');
-      window.stopAllSounds();
-      setIsMuted(true);
-    } else {
-      console.log('[Sound Debug] No stopAllSounds function, toggling state');
-      setIsMuted(m => !m);
-    }
-  };
-
-  const handleUnmuteClick = () => {
-    console.log('[Sound Debug] Unmute button clicked');
-    setIsMuted(false);
-    console.log('[Sound Debug] Set isMuted to false');
-    // Optionally, add your own logic to resume sound
-  };
-
-  const handleFullscreenClick = () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen()
-    } else {
-      document.documentElement.requestFullscreen()
-    }
-  }
-
   return (
     <div
       id="hud"
       className="fixed inset-0 bg-gray-800 bg-opacity-0 text-white p-4 z-50 pointer-events-none"
-      ref={refContainer}
     >
-      <div className="fixed top-4 left-4 z-50 pointer-events-auto">
-        <button
-          onClick={isMuted ? handleUnmuteClick : handleMuteClick}
-          className="mt-4 w-12 h-12 flex items-center justify-center rounded-full bg-white/90 hover:bg-gray-200 border border-gray-300 shadow-lg transition-all focus:outline-none"
-          title={isMuted ? "Unmute All Sounds" : "Mute All Sounds"}
-          style={{ boxShadow: '0 6px 24px 0 rgba(0,0,0,0.08)' }}
-        >
-          {isMuted ? (
-            // Speaker Off Icon
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-gray-700">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9v6h4l5 5V4l-5 5H9z" />
-              <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          ) : (
-            // Speaker Icon
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-gray-700">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9v6h4l5 5V4l-5 5H9z" />
-            </svg>
-          )}
-        </button>
+      {/* Top left - Game logo */}
+      <div className="absolute top-4 left-4 pointer-events-auto">
+        <Link href="/">
+          <Image
+            src="/logo.png"
+            alt="Trading Land"
+            width={150}
+            height={50}
+            className="h-10 w-auto"
+          />
+        </Link>
       </div>
 
-      {/* Wallet Count Badge & Dropdown */}
-      <div className="fixed top-4 right-4 z-50 pointer-events-auto" ref={walletDropdownRef}>
-        <div className="flex gap-2">
-          <div
-            className="bg-blue-600 text-white rounded-full px-4 py-2 shadow-lg text-sm font-semibold flex items-center gap-2 cursor-pointer select-none"
+      {/* Top right - Wallet connection */}
+      <div className="absolute top-4 right-4 pointer-events-auto">
+        <div className="relative">
+          <button
             onClick={() => {
-              setWalletDropdownOpen(v => !v);
-              // Close portfolio dropdown when wallet dropdown is toggled
-              setIsPortfolioBoxExpanded(false);
+              // Utiliser la fonction setWalletDropdownOpen fournie par WalletConnector
+              // pour basculer correctement l'état du dropdown
+              // Inverser explicitement l'état actuel pour s'assurer que le basculement fonctionne correctement
+              setWalletDropdownOpen((prevState) => !prevState);
             }}
+            className="wallet-button bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg transition-colors flex items-center space-x-2"
           >
-            <span className="inline-block w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-            {addresses.length} wallet{addresses.length !== 1 ? 's' : ''} connected
-          </div>
-          
-          <div
-            className="bg-green-600 text-white rounded-full px-4 py-2 shadow-lg text-sm font-semibold flex items-center gap-2 cursor-pointer select-none"
-            onClick={() => {
-              setIsPortfolioBoxExpanded(v => !v);
-              // Close wallet dropdown when portfolio dropdown is toggled
-              setWalletDropdownOpen(false);
-              
-              // Call checkPortfolioForAddress with the first connected address if available
-              if (addresses.length > 0) {
-                const firstAddress = addresses[0];
-                console.log(`Clicking My Portfolio - using first address: ${firstAddress}`);
-                checkPortfolioForAddress(firstAddress);
-                
-                // Also fetch portfolio data using the API with this address
-                // Use the proper type definition for the window object
-                interface CustomWindow extends Window {
-                  fetchWalletPortfolio?: (address?: string) => Promise<void>;
-                }
-                
-                const customWindow = window as CustomWindow;
-                // Use optional chaining to safely call the function if it exists
-                customWindow.fetchWalletPortfolio?.(firstAddress);
-              } else {
-                console.log('No addresses connected, cannot check portfolio');
-              }
-            }}
-          >
-            <span>My Portfolio</span>
-            {!loadingPortfolioData && portfolioData.length > 0 && (
-              <span className="ml-1 px-2 py-0.5 bg-green-700 rounded-full text-xs">
-                ${totalPortfolioValue}
-              </span>
-            )}
-          </div>
-        </div>
-        
-        {/* Portfolio Box */}
-        {isPortfolioBoxExpanded && (
-          <div className="absolute right-0 mt-2 w-72 bg-gray-800 bg-opacity-80 text-white rounded-lg shadow-2xl py-2 pointer-events-auto animate-fade-in z-50">
-            <div className="max-h-80 overflow-y-auto px-2 py-1">
-              {loadingPortfolioData ? (
-                <div className="flex justify-center items-center py-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                </div>
-              ) : portfolioData.length === 0 ? (
-                <div className="text-center py-4 text-gray-400">
-                  No portfolio data available
-                </div>
-              ) : (
-                portfolioData.map((item) => (
-                  <div key={item._id} className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded mb-2 text-xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center">
-                        {item.logo && (
-                          <div className="w-5 h-5 mr-1 overflow-hidden rounded-full">
-                            <Image 
-                              src={item.logo} 
-                              alt={item.symbol} 
-                              width={20} 
-                              height={20} 
-                              className="object-contain"
-                              onError={(e) => {
-                                // Handle image load errors
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = 'none';
-                              }}
-                            />
-                          </div>
-                        )}
-                        <span className="font-bold">
-                          {item.numberCoin >= 1000 ? 
-                            item.numberCoin.toLocaleString('en-US', {maximumFractionDigits: 2}) : 
-                            item.numberCoin.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 6})}
-                          {' '}{item.symbol}
-                        </span>
-                      </div>
-                      <span>${item.actualPrice.toFixed(item.actualPrice < 0.01 ? 6 : 2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-gray-300">
-                      <span className="truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                      <span className="text-right text-green-400 font-semibold">
-                        ${item.totalActualPrice.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-        {walletDropdownOpen && (
-          <div className="absolute right-0 mt-2 w-72 bg-white text-gray-900 rounded-lg shadow-2xl border border-gray-200 py-2 animate-fade-in z-50">
-            <div className="px-4 py-2 font-semibold border-b border-gray-100 text-sm">Connected Wallets</div>
-            {addresses.length === 0 ? (
-              <div className="flex flex-col items-center px-4 py-3">
-                <div className="text-gray-500 text-sm mb-2">No wallets connected</div>
-              </div>
-            ) : (
-              addresses.map(addr => (
-                <div key={addr} className="flex flex-col gap-1 px-4 py-2 hover:bg-gray-100 text-xs break-all">
-                  <div className="flex items-center justify-between">
-                    <span className="truncate max-w-[140px]">{addr}</span>
-                    <button
-                      className="ml-3 text-red-600 hover:text-red-800 font-semibold px-2 py-1 rounded transition-colors text-xs border border-red-200 hover:bg-red-50"
-                      onClick={e => { e.stopPropagation(); disconnectWallet(addr); }}
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                  <button
-                    className="mb-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1 rounded shadow transition-colors text-xs w-fit self-end disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    onClick={e => { e.stopPropagation(); refreshTokenPrices(addr); }}
-                    disabled={!!loadingPrice[addr] || !(wallet[addr] && wallet[addr].length)}
-                  >
-                    {loadingPrice[addr] ? (
-                      <span className="flex items-center gap-1">
-                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                        </svg>
-                        Refreshing prices...
-                      </span>
-                    ) : (
-                      'Refresh tokens price'
-                    )}
-                  </button>
-                  <button
-                    className="mt-1 bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1 rounded shadow transition-colors text-xs w-fit self-end disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    onClick={e => { e.stopPropagation(); checkPortfolioForAddress(addr); }}
-                    disabled={!!loadingPortfolio[addr]}
-                  >
-                    Check Portfolio
-                  </button>
-                  {loadingPortfolio[addr] && (
-                    <div className="flex items-center gap-2 mt-1 self-end">
-                      <svg className="animate-spin h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                      </svg>
-                      <span className="text-xs text-green-700">Loading...</span>
-                      <span className="text-xs text-green-800 font-bold">{liveTokenCount[addr] ?? 0} Token{liveTokenCount[addr] === 1 ? '' : 's'} found</span>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-            {/* Always show add wallet button at the bottom */}
-            <div className="flex flex-col items-center px-4 py-3 border-t border-gray-200 mt-2">
-              {/* Render a button for each detected wallet provider */}
-              {detectedWallets.length === 0 ? (
-                <button
-                  className="bg-gray-400 text-white font-semibold px-4 py-2 rounded shadow text-sm w-full cursor-not-allowed"
-                  disabled
-                >
-                  No supported wallet provider found
-                </button>
-              ) : (
-                <div className="flex flex-col gap-2 w-full">
-                  {detectedWallets.map((wallet) => (
-                    <button
-                      key={wallet.id}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded shadow transition-colors text-sm w-full"
-                      onClick={e => { e.stopPropagation(); handleWalletConnect(wallet.id); }}
-                    >
-                      <img src={wallet.logo} alt={wallet.name + ' logo'} className="w-6 h-6" />
-                      Connect with {wallet.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-            </div>
-          </div>
-        )}
-      </div>
-      {/* Global Notifications */}
-      <div className="fixed top-24 left-1/2 transform -translate-x-1/2 flex flex-col items-center space-y-2 pointer-events-none">
-        {notifications.map((notification) => (
-          <div
-            key={notification.id}
-            className="bg-black/60 text-white w-full max-w-sm p-3 rounded-lg shadow-xl text-center transition-opacity duration-500"
-            style={{
-              animation: 'bounceIn 0.4s ease-out, fadeOut 0.6s ease 4s forwards',
-              transformOrigin: 'top center',
-            }}
-          >
-            <div className="flex flex-col items-center">
-              <p className="font-semibold font-sans text-yellow-400 text-lg sm:text-xl">
-                {notification.author}
-              </p>
-              <p className="text-white text-base sm:text-lg">{notification.content}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between items-center">
-        <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20">
-          <p className="text-sm">👋 Welcome to </p>
-          <a
-            className="text-sm md:text-2xl font-bold pointer-events-auto hover:text-gray-400"
-            href="/"
-          >
-            TradingLand
-          </a>
-          <div className="text-sm flex justify-center text-white pointer-events-auto">
-            <Link
-              href="https://discord.gg/kPhgtj49U2"
-              target="_blank"
-              className="flex items-center justify-center mt-2 gap-2 px-3 py-1 w-full bg-transparent border border-b-2 hover:bg-blue-900/30 rounded-md transition-colors"
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 640 512"
-                className="h-5 w-5 text-white fill-white"
-              >
-                <path d="M524.5 69.8a1.5 1.5 0 0 0 -.8-.7A485.1 485.1 0 0 0 404.1 32a1.8 1.8 0 0 0 -1.9 .9 337.5 337.5 0 0 0 -14.9 30.6 447.8 447.8 0 0 0 -134.4 0 309.5 309.5 0 0 0 -15.1-30.6 1.9 1.9 0 0 0 -1.9-.9A483.7 483.7 0 0 0 116.1 69.1a1.7 1.7 0 0 0 -.8 .7C39.1 183.7 18.2 294.7 28.4 404.4a2 2 0 0 0 .8 1.4A487.7 487.7 0 0 0 176 479.9a1.9 1.9 0 0 0 2.1-.7A348.2 348.2 0 0 0 208.1 430.4a1.9 1.9 0 0 0 -1-2.6 321.2 321.2 0 0 1 -45.9-21.9 1.9 1.9 0 0 1 -.2-3.1c3.1-2.3 6.2-4.7 9.1-7.1a1.8 1.8 0 0 1 1.9-.3c96.2 43.9 200.4 43.9 295.5 0a1.8 1.8 0 0 1 1.9 .2c2.9 2.4 6 4.9 9.1 7.2a1.9 1.9 0 0 1 -.2 3.1 301.4 301.4 0 0 1 -45.9 21.8 1.9 1.9 0 0 0 -1 2.6 391.1 391.1 0 0 0 30 48.8 1.9 1.9 0 0 0 2.1 .7A486 486 0 0 0 610.7 405.7a1.9 1.9 0 0 0 .8-1.4C623.7 277.6 590.9 167.5 524.5 69.8zM222.5 337.6c-29 0-52.8-26.6-52.8-59.2S193.1 219.1 222.5 219.1c29.7 0 53.3 26.8 52.8 59.2C275.3 311 251.9 337.6 222.5 337.6zm195.4 0c-29 0-52.8-26.6-52.8-59.2S388.4 219.1 417.9 219.1c29.7 0 53.3 26.8 52.8 59.2C470.7 311 447.5 337.6 417.9 337.6z" />
-              </svg>
-              <span className="font-medium">Join Discord</span>
-            </Link>
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-between items-center">
-        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {connectSolana();}}>
-          <div className="text-sm flex justify-center text-white pointer-events-auto">
-              <span className="font-medium">Connect Wallet</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-center">
-        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {getSignaturesForAddress("GthTyfd3EV9Y8wN6zhZeES5PgT2jQVzLrZizfZquAY5S");}}>
-          <div className="text-sm flex justify-center text-white pointer-events-auto">
-              <span className="font-medium">get_signatures_for_address</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-center">
-        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {checkPricePortfolio(wallet);}}>
-          <div className="text-sm flex justify-center text-white pointer-events-auto">
-              <span className="font-medium">Check Portfolio Price</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-between items-center">
-        <div className="mt-5 shadow-4xl p-4 rounded-lg bg-gray-800 bg-opacity-20" onClick={() => {getTokenMetadata("3SghkPdBSrpF9bzdAy5LwR4nGgFbqNcC6ZSq8vtZdj91");}}>
-          <div className="text-sm flex justify-center text-white pointer-events-auto">
-              <span className="font-medium">Check Metadata</span>
-          </div>
-        </div>
-      </div>
-
-      {/* My Trades Box */}
-      <div className="fixed bottom-4 left-4 pointer-events-auto">
-        <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20 max-w-xs transition-all duration-300 ease-in-out">
-          <p 
-            className="text-sm font-bold cursor-pointer flex items-center justify-between"
-            onClick={() => setIsTradesBoxExpanded(!isTradesBoxExpanded)}
-          >
-            My Trades
-            <span className={`ml-2 transform transition-transform duration-300 ${isTradesBoxExpanded ? 'rotate-180' : ''}`}>
-              ▲
+              <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+              <path
+                fillRule="evenodd"
+                d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>
+              {addresses.length > 0
+                ? `${addresses.length} Wallet${
+                    addresses.length !== 1 ? 's' : ''
+                  }`
+                : 'Connect Wallet'}
             </span>
-          </p>
-          <div 
-            className={`overflow-hidden transition-all duration-300 ease-in-out ${isTradesBoxExpanded ? 'max-h-80' : 'max-h-0'}`}
-          >
-            <div className="flex flex-col space-y-2">
-              {/* Drift Platform */}
-              <div 
-                className="flex items-center bg-gray-700 bg-opacity-30 p-1.5 rounded cursor-pointer"
-                onClick={() => setIsDriftTradesVisible(!isDriftTradesVisible)}
-              >
-                <div className="relative w-5 h-5 mr-2">
-                  <Image 
-                    src="/assets/logos/DRIFT.png" 
-                    alt="Drift Logo" 
-                    width={20} 
-                    height={20} 
-                    className="object-contain"
-                  />
-                </div>
-                <span className="text-xs font-semibold">Drift</span>
-                <span className={`ml-auto transform transition-transform duration-300 ${isDriftTradesVisible ? 'rotate-180' : ''}`}>
-                  ▲
-                </span>
-              </div>
-              
-              {/* Trade list - conditionally rendered based on visibility state */}
-              <div className={`text-xs space-y-2 overflow-hidden transition-all duration-300 ease-in-out ${isDriftTradesVisible ? 'max-h-60' : 'max-h-0'}`}>
-                <div className="space-y-2">
-                  <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-green-400">LONG</span>
-                      <span className="font-bold">20 JUP</span>
-                      <span>x10</span>
-                    </div>
-                    <div className="flex justify-between text-gray-300">
-                      <span>Entry: $1.2</span>
-                      <span>TP: 22%</span>
-                      <span>SL: 5%</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-green-400">LONG</span>
-                      <span className="font-bold">50 PYTH</span>
-                      <span>x5</span>
-                    </div>
-                    <div className="flex justify-between text-gray-300">
-                      <span>Entry: $2</span>
-                      <span>TP: 20%</span>
-                      <span>SL: 5%</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col bg-gray-700 bg-opacity-50 p-2 rounded">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-red-400">SHORT</span>
-                      <span className="font-bold">2 SOL</span>
-                      <span>x2</span>
-                    </div>
-                    <div className="flex justify-between text-gray-300">
-                      <span>Entry: $200</span>
-                      <span>TP: 12%</span>
-                      <span>SL: 3%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          </button>
+          
+          <WalletDropdown
+            walletDropdownOpen={walletDropdownOpen}
+            walletDropdownRef={walletDropdownRef}
+            addresses={addresses}
+            detectedWallets={detectedWallets}
+            wallet={wallet}
+            loadingPortfolio={loadingPortfolio}
+            loadingPrice={loadingPrice}
+            liveTokenCount={liveTokenCount}
+            handleWalletConnect={handleWalletConnect}
+            disconnectWallet={disconnectWallet}
+            refreshTokenPrices={refreshTokenPrices}
+          />
         </div>
       </div>
-      
-      {/* Prices Box */}
-      <div className="fixed bottom-4 right-4 pointer-events-auto">
+
+      {/* Global Notifications */}
+      <Notifications notifications={notifications} />
+
+      {/* Bottom left - Prices Box */}
+      {/* <div className="fixed bottom-4 left-4 pointer-events-auto">
         <div className="shadow-4xl p-4 rounded-lg space-y-1 bg-gray-800 bg-opacity-20 max-w-xs transition-all duration-300 ease-in-out">
           <p 
             className="text-sm font-bold cursor-pointer flex items-center justify-between"
             onClick={() => setIsPricesBoxExpanded(!isPricesBoxExpanded)}
           >
-            Prices
-            <span className={`ml-2 transform transition-transform duration-300 ${isPricesBoxExpanded ? 'rotate-180' : ''}`}>
-              ▲
+            Market Prices
+            <span className={`transition-transform duration-300 ${isPricesBoxExpanded ? 'rotate-180' : ''}`}>
+              ▼
             </span>
           </p>
-          <div 
-            className={`overflow-hidden transition-all duration-300 ease-in-out ${isPricesBoxExpanded ? 'max-h-60' : 'max-h-0'}`}
-          >
-            <PricesTable />
-          </div>
+          
+          {isPricesBoxExpanded && (
+            <div className="mt-2 max-h-60 overflow-y-auto custom-scrollbar">
+              <PricesTable />
+            </div>
+          )}
         </div>
+      </div> */}
+
+      {/* Bottom left - Trades Box (positioned below Prices Box) */}
+      {/* <RecentTrades 
+        isTradesBoxExpanded={isTradesBoxExpanded}
+        setIsTradesBoxExpanded={setIsTradesBoxExpanded}
+      /> */}
+
+      {/* Portfolio Box - Positioned at the bottom left */}
+      <div className="fixed bottom-4 left-4 pointer-events-auto z-50">
+        <Portfolio 
+          isPortfolioBoxExpanded={isPortfolioBoxExpanded}
+          setIsPortfolioBoxExpanded={setIsPortfolioBoxExpanded}
+          setNotifications={setNotifications}
+        />
       </div>
 
-      <div className="flex lg:hidden pointer-events-auto">
-        <div className="absolute top-2 right-2">
-          <button onClick={handleFullscreenClick} className="text-white hover:text-gray-300">
-            <Maximize className="size-16" />
-          </button>
-        </div>
-        <div className="absolute bottom-12 left-12">
-          <Joystick
-            size={100}
-            baseColor="rgba(255, 255, 255, 0.5)"
-            stickColor="rgba(255, 255, 255, 0.2)"
-            move={(props) => gameInstance?.inputManager.handleJoystickMove(props)}
-            stop={(props) => gameInstance?.inputManager.handleJoystickStop(props)}
-          />
-        </div>
-        <div className="absolute bottom-12 right-12">
-          <button
-            className="bg-gray-500 bg-opacity-20 text-white font-bold py-4 px-8 rounded-full shadow-lg transition-transform transform hover:bg-gray-600 hover:bg-opacity-100 focus:bg-green-600 focus:bg-opacity-100 focus:outline-none active:translate-y-1 w-24 h-24 flex items-center justify-center"
-            onTouchStart={() => gameInstance && (gameInstance.inputManager.inputState.s = true)}
-            onMouseDown={() => gameInstance && (gameInstance.inputManager.inputState.s = true)}
-            onTouchEnd={() => gameInstance && (gameInstance.inputManager.inputState.s = false)}
-            onMouseOut={() => gameInstance && (gameInstance.inputManager.inputState.s = false)}
-          >
-            <span className="pointer-events-none">Jump</span>
-          </button>
-        </div>
+      {/* Bottom right - Audio controls */}
+      {/* <AudioControls gameInstance={gameInstance} /> */}
+
+      {/* Bottom right - Chat box */}
+      {/*
+      <div className="fixed bottom-20 right-4 pointer-events-auto">
+         <ChatBox messages={messageComponents} sendMessage={sendMessage} />
       </div>
+      */}
+      
+      {/* Coin Counter - Positioned at the top center */}
+      {gameInstance && (
+        <CoinCounter 
+          gameInstance={gameInstance} 
+        />
+      )}
+
+      {/* Invisible component for wallet transactions */}
+      <WalletTransactions
+        address={addresses[0]}
+        solanaConnection={solanaConnection}
+        setNotifications={setNotifications}
+      />
     </div>
   );
 }

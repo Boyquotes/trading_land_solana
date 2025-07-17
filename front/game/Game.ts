@@ -2,6 +2,7 @@ import { EntityManager } from '@shared/system/EntityManager'
 import { config } from '@shared/network/config'
 import { InputManager } from './InputManager'
 import { WebSocketManager } from './WebsocketManager'
+import { AudioManager } from './AudioManager'
 import {
   AnimationSystem,
   ChatSystem,
@@ -49,6 +50,7 @@ export class Game {
   private vehicleSystem: VehicleSystem
   private invisibilitySystem: InvisibilitySystem
   renderer: Renderer
+  audioManager: AudioManager
   hud: Hud
   private identifyFollowedMeshSystem: IdentifyFollowedMeshSystem
   private constructor(gameContainerRef: MutableRefObject<any>, port?: number) {
@@ -69,6 +71,7 @@ export class Game {
     this.textComponentSystem = new TextComponentSystem()
     this.vehicleSystem = new VehicleSystem()
     this.invisibilitySystem = new InvisibilitySystem()
+    this.audioManager = AudioManager.getInstance()
 
     this.renderer = new Renderer(gameContainerRef)
     this.inputManager = new InputManager(this.websocketManager, this.renderer.camera.controlSystem)
