@@ -15,4 +15,6 @@ export interface InputMessage extends ClientMessage {
   y: number
   // INTERACTION
   i: boolean
+  // FIRE PROJECTILE (left mouse click)
+  f: boolean
 }

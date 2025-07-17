@@ -29,6 +29,8 @@ export class InputManager {
     y: 0,
     // INTERACTION
     i: false,
+    // FIRE PROJECTILE
+    f: false,
   }
   proximityPromptSystem = new ProximityPromptSystem()
 
@@ -50,10 +52,29 @@ export class InputManager {
     // Add event listeners to handle user input
     window.addEventListener('keydown', this.handleKeyDown.bind(this))
     window.addEventListener('keyup', this.handleKeyUp.bind(this))
+    window.addEventListener('mousedown', this.handleMouseDown.bind(this))
+    window.addEventListener('mouseup', this.handleMouseUp.bind(this))
   }
 
-  private isGameFocused(event: KeyboardEvent) {
+  private isGameFocused(event: KeyboardEvent | MouseEvent): boolean {
     return event.target === document.body
+  }
+
+  private handleMouseDown(event: MouseEvent) {
+    if (!this.pcUser) this.pcUser = true
+    if (!this.isGameFocused(event)) return
+    
+    // Left mouse button click for firing projectiles
+    if (event.button === 0) {
+      this.inputState.f = true
+    }
+  }
+
+  private handleMouseUp(event: MouseEvent) {
+    // Left mouse button release
+    if (event.button === 0) {
+      this.inputState.f = false
+    }
   }
 
   public handleJoystickMove(joystick: IJoystickUpdateEvent) {
@@ -112,6 +133,10 @@ export class InputManager {
           case 'e':
             this.inputState.i = true
             break
+          case 'P':
+          case 'p':
+            this.inputState.f = true
+            break
         }
         break
       case KeyboardLanguage.FR:
@@ -142,6 +167,10 @@ export class InputManager {
           case 'E':
           case 'e':
             this.inputState.i = true
+            break
+          case 'P':
+          case 'p':
+            this.inputState.f = true
             break
         }
         break
@@ -179,6 +208,10 @@ export class InputManager {
           case 'e':
             this.inputState.i = false
             break
+          case 'P':
+          case 'p':
+            this.inputState.f = false
+            break
         }
         break
       case KeyboardLanguage.FR:
@@ -209,6 +242,10 @@ export class InputManager {
           case 'E':
           case 'e':
             this.inputState.i = false
+            break
+          case 'P':
+          case 'p':
+            this.inputState.f = false
             break
         }
         break
@@ -245,7 +282,9 @@ export class InputManager {
       state1.l === state2.l &&
       state1.r === state2.r &&
       state1.s === state2.s &&
-      state1.y === state2.y
+      state1.y === state2.y &&
+      state1.i === state2.i &&
+      state1.f === state2.f
     )
   }
 }

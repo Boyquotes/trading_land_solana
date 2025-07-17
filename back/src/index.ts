@@ -34,6 +34,8 @@ import { FollowTargetSystem } from './ecs/system/FollowTargetSystem.js'
 import { ProximityPromptSystem } from './ecs/system/events/ProximityPromptEventSystem.js'
 import { ConvexHullColliderSystem } from './ecs/system/physics/ConvexHullColliderSystem.js'
 import { VehicleSystem } from './ecs/system/VehicleSystem.js'
+import { ProjectileSystem } from './ecs/system/ProjectileSystem.js'
+import { PlayerRespawnSystem } from './ecs/system/PlayerRespawnSystem.js'
 
 // TODO: Make it wait for the websocket server to start
 const eventSystem = EventSystem.getInstance()
@@ -73,6 +75,8 @@ const randomizeSystem = new RandomizeSystem()
 const boundaryCheckSystem = new BoundaryCheckSystem()
 const zombieSystem = new ZombieSystem()
 const followTargetSystem = new FollowTargetSystem()
+const projectileSystem = new ProjectileSystem()
+const playerRespawnSystem = new PlayerRespawnSystem()
 
 new Chat()
 
@@ -120,6 +124,8 @@ async function updateGameState(dt: number) {
   groundedCheckSystem.update(entities, physicsSystem.world)
   movementSystem.update(dt, entities)
   vehicleSystem.update(entities, physicsSystem.world, dt)
+  projectileSystem.update(dt, entities)
+  playerRespawnSystem.update(dt, entities)
 
   animationSystem.update(entities)
   syncRotationSystem.update(entities)

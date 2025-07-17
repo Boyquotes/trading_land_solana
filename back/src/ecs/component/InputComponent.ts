@@ -8,4 +8,5 @@ export class InputComponent extends Component {
   space: boolean = false
   lookingYAngle = 0
   interact: boolean = false
+  fireProjectile: boolean = false
 }

@@ -21,5 +21,6 @@ export class InputProcessingSystem {
     inputComponent.space = inputMessage.s
     inputComponent.lookingYAngle = inputMessage.y
     inputComponent.interact = inputMessage.i
+    inputComponent.fireProjectile = inputMessage.f
   }
 }

@@ -24,6 +24,8 @@ export enum SerializedComponentType {
   WHEEL = 17,
   INVISIBLE = 18,
   TEXTURE = 19,
+  PROJECTILE = 20,
+  HEALTH = 21,
 }
 
 export enum SerializedEntityType {

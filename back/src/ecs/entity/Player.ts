@@ -20,6 +20,7 @@ import { ColorComponent } from '../../../../shared/component/ColorComponent.js'
 import { ServerMeshComponent } from '../../../../shared/component/ServerMeshComponent.js'
 import { TextComponent } from '../../../../shared/component/TextComponent.js'
 import { PhysicsPropertiesComponent } from '../component/physics/PhysicsPropertiesComponent.js'
+import { HealthComponent } from '../../../../shared/component/HealthComponent.js'
 
 export class Player {
   entity: Entity
@@ -81,6 +82,10 @@ export class Player {
     this.entity.addComponent(new LockedRotationComponent(this.entity.id))
     this.entity.addComponent(new CapsuleColliderComponent(this.entity.id))
 
+    // Health system - players start with 100 health
+    const healthComponent = new HealthComponent(this.entity.id, 100)
+    this.entity.addComponent(healthComponent)
+
     // Network
     const networkDataComponent = new NetworkDataComponent(this.entity.id, this.entity.type, [
       positionComponent,
@@ -91,6 +96,7 @@ export class Player {
       serverMeshComponent,
       textComponent,
       playerComponent,
+      healthComponent,
     ])
 
     this.entity.addComponent(networkDataComponent)

@@ -30,6 +30,8 @@ import { TextComponent } from '@shared/component/TextComponent'
 import { VehicleComponent } from '@shared/component/VehicleComponent'
 import { PlayerComponent } from '@shared/component/PlayerComponent'
 import { VehicleOccupancyComponent } from '@shared/component/VehicleOccupancyComponent'
+import { ProjectileComponent } from '@shared/component/ProjectileComponent'
+import { HealthComponent } from '@shared/component/HealthComponent'
 
 import { NetworkComponent } from '@shared/network/NetworkComponent'
 import { EventSystem } from '@shared/system/EventSystem'
@@ -203,6 +205,12 @@ export class SyncComponentsSystem {
         break
       case SerializedComponentType.INVISIBLE:
         component = new InvisibleComponent(entityId)
+        break
+      case SerializedComponentType.PROJECTILE:
+        component = new ProjectileComponent(entityId, 20, 100, 5, 0)
+        break
+      case SerializedComponentType.HEALTH:
+        component = new HealthComponent(entityId, 100)
         break
       default:
         console.error("Unknown component type, can't create component")

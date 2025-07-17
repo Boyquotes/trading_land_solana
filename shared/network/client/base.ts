@@ -5,6 +5,7 @@ export enum ClientMessageType {
   SET_PLAYER_NAME = 4,
   SPAWN_CUBE = 5,
   SPAWN_CUBE_COIN = 6,
+  FIRE_PROJECTILE = 7,
 }
 
 export interface ClientMessage {

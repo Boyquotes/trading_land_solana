@@ -279,7 +279,7 @@ export class WebsocketSystem {
       console.error(`Player with WS ${ws} not found.`)
       return
     }
-    const { u: up, d: down, l: left, r: right, s: space, y: angleY, i: interact } = message
+    const { u: up, d: down, l: left, r: right, s: space, y: angleY, i: interact, f: fireProjectile } = message
     if (
       typeof up !== 'boolean' ||
       typeof down !== 'boolean' ||
@@ -287,7 +287,8 @@ export class WebsocketSystem {
       typeof right !== 'boolean' ||
       typeof space !== 'boolean' ||
       typeof angleY !== 'number' ||
-      typeof interact !== 'boolean'
+      typeof interact !== 'boolean' ||
+      typeof fireProjectile !== 'boolean'
     ) {
       console.error('Invalid input message', message)
       return

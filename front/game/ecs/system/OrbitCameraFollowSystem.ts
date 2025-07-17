@@ -28,6 +28,8 @@ export class OrbitCameraFollowSystem {
     this.cameraControls.draggingSmoothTime = 1e-10
     this.cameraControls.dollyDragInverted = true
 
+    // Disable left mouse button for camera rotation (free it for shooting)
+    this.cameraControls.mouseButtons.left = CameraControls.ACTION.NONE
     this.cameraControls.mouseButtons.middle = CameraControls.ACTION.ZOOM
     this.cameraControls.mouseButtons.right = CameraControls.ACTION.ROTATE
 
