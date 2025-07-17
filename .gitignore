@@ -12,3 +12,5 @@ node_modules
 .DS_STORE
 target
 front/public/wallets/*
+front/public/transactions/*
+
