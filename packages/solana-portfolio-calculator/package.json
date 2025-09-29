@@ -51,6 +51,7 @@
     "@solana/spl-token-registry": "^0.2.4574",
     "@solana/web3.js": ">=1.90.0",
     "axios": "^1.6.2",
+    "dotenv": "^17.2.2",
     "express": "^4.21.2"
   },
   "devDependencies": {
