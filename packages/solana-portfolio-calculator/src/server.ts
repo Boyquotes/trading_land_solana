@@ -1,6 +1,15 @@
 import express, { Request, Response } from 'express';
 import { PortfolioCalculator } from './PortfolioCalculator';
-import { PortfolioCalculatorConfig, PortfolioResult, PortfolioError } from './types';
+import { TransactionManager } from './TransactionManager';
+import { 
+  PortfolioCalculatorConfig, 
+  PortfolioResult, 
+  PortfolioError,
+  TransactionManagerConfig,
+  GetTransactionsOptions,
+  BatchTransactionsRequest,
+  BatchTransactionsResponse
+} from './types';
 
 /**
  * HTTP API server for the portfolio calculator
@@ -8,11 +17,20 @@ import { PortfolioCalculatorConfig, PortfolioResult, PortfolioError } from './ty
 export class PortfolioAPIServer {
   private app: express.Application;
   private calculator: PortfolioCalculator;
+  private transactionManager: TransactionManager;
   private port: number;
 
   constructor(config: PortfolioCalculatorConfig, port: number = 3000) {
     this.app = express();
     this.calculator = new PortfolioCalculator(config);
+    
+    // Create transaction manager with the same RPC endpoint
+    const transactionConfig: TransactionManagerConfig = {
+      rpcEndpoint: config.rpcEndpoint,
+      timeout: config.timeout,
+      customHeaders: config.customHeaders
+    };
+    this.transactionManager = new TransactionManager(transactionConfig);
     this.port = port;
     
     this.setupMiddleware();
@@ -186,6 +204,136 @@ export class PortfolioAPIServer {
       }
     });
 
+    // Transaction endpoints
+
+    // Get transactions for an address
+    this.app.get('/transactions/:address', async (req: Request, res: Response) => {
+      try {
+        const { address } = req.params;
+        
+        // Parse query options
+        const options: GetTransactionsOptions = {
+          limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+          before: req.query.before as string,
+          until: req.query.until as string,
+          commitment: req.query.commitment as any
+        };
+
+        const result = await this.transactionManager.getTransactions(address, options);
+        
+        if (result.success) {
+          res.json(result);
+        } else {
+          res.status(400).json(result);
+        }
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    // Get complete transaction history for an address
+    this.app.get('/transactions/:address/complete', async (req: Request, res: Response) => {
+      try {
+        const { address } = req.params;
+        
+        const options: GetTransactionsOptions = {
+          commitment: req.query.commitment as any
+        };
+
+        const result = await this.transactionManager.getCompleteTransactionHistory(address, options);
+        
+        if (result.success) {
+          res.json(result);
+        } else {
+          res.status(400).json(result);
+        }
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    // Batch transaction requests
+    this.app.post('/transactions/batch', async (req: Request, res: Response) => {
+      try {
+        const { addresses, options }: BatchTransactionsRequest = req.body;
+        
+        if (!Array.isArray(addresses) || addresses.length === 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'addresses must be a non-empty array',
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        if (addresses.length > 50) {
+          return res.status(400).json({
+            success: false,
+            error: 'Maximum 50 addresses allowed per batch transaction request',
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        const startTime = Date.now();
+        
+        const results = await Promise.allSettled(
+          addresses.map(address => this.transactionManager.getTransactions(address, options))
+        );
+
+        const transactionResults = results.map((result, index) => ({
+          address: addresses[index],
+          result: result.status === 'fulfilled' ? result.value : {
+            success: false,
+            address: addresses[index],
+            transactions: [],
+            pagination: { page: 1, perPage: 0, total: 0, hasMore: false },
+            timestamp: new Date().toISOString(),
+            error: result.status === 'rejected' ? result.reason.message : 'Unknown error'
+          }
+        }));
+
+        const response: BatchTransactionsResponse = {
+          success: true,
+          results: transactionResults,
+          stats: {
+            successful: transactionResults.filter(r => r.result.success).length,
+            failed: transactionResults.filter(r => !r.result.success).length,
+            totalTime: Date.now() - startTime
+          },
+          timestamp: new Date().toISOString()
+        };
+
+        res.json(response);
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    // Transaction health check
+    this.app.get('/transactions/health', async (req: Request, res: Response) => {
+      try {
+        const health = await this.transactionManager.healthCheck();
+        res.status(health.healthy ? 200 : 503).json(health);
+      } catch (error) {
+        res.status(500).json({
+          healthy: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
     // API documentation
     this.app.get('/', (req: Request, res: Response) => {
       res.json({
@@ -196,15 +344,31 @@ export class PortfolioAPIServer {
           'GET /portfolio/:address': 'Calculate portfolio for address',
           'GET /validate/:address': 'Validate Solana address',
           'GET /wallet-info/:address': 'Get basic wallet information',
-          'POST /portfolio/batch': 'Batch portfolio calculation'
+          'POST /portfolio/batch': 'Batch portfolio calculation',
+          'GET /transactions/:address': 'Get transaction history for address',
+          'GET /transactions/:address/complete': 'Get complete transaction history (up to 2000 txs)',
+          'POST /transactions/batch': 'Batch transaction requests for multiple addresses',
+          'GET /transactions/health': 'Transaction manager health check'
         },
         queryParameters: {
+          // Portfolio endpoints
           includePricing: 'boolean - Include pricing data (default: true)',
           includeMetadata: 'boolean - Include token metadata (default: true)',
           includeNFTs: 'boolean - Include NFTs (default: true)',
           includeZeroBalance: 'boolean - Include zero balance tokens (default: false)',
           maxConcurrency: 'number - Max concurrent requests (default: 10)',
-          timeout: 'number - Request timeout in ms (default: 30000)'
+          timeout: 'number - Request timeout in ms (default: 30000)',
+          // Transaction endpoints
+          limit: 'number - Max transactions to fetch (default: 100, max: 1000)',
+          before: 'string - Fetch transactions before this signature (pagination)',
+          until: 'string - Fetch transactions until this signature',
+          commitment: 'string - Commitment level (finalized, confirmed, processed)'
+        },
+        examples: {
+          portfolio: 'GET /portfolio/9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+          transactions: 'GET /transactions/9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM?limit=50',
+          completeHistory: 'GET /transactions/9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM/complete',
+          batchTransactions: 'POST /transactions/batch with {"addresses": ["addr1", "addr2"]}'
         }
       });
     });

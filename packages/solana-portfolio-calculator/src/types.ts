@@ -265,3 +265,174 @@ export interface PortfolioCalculatorEvents {
   'token:price:fetched': { mint: string; price: TokenPrice };
   'token:price:failed': { mint: string; error: Error };
 }
+
+// ========================================
+// Transaction Types
+// ========================================
+
+/**
+ * Solana transaction signature information
+ */
+export interface TransactionSignature {
+  /** Transaction signature */
+  signature: string;
+  /** Block slot number */
+  slot: number;
+  /** Block time (Unix timestamp) */
+  blockTime: number | null;
+  /** Block time formatted as string */
+  blockTimeFormatted: string;
+  /** Transaction error (null if successful) */
+  err: any;
+  /** Transaction memo */
+  memo?: string;
+  /** Confirmation status */
+  confirmationStatus?: string;
+}
+
+/**
+ * Options for fetching transactions
+ */
+export interface GetTransactionsOptions {
+  /** Maximum number of transactions to fetch (default: 100, max: 2000) */
+  limit?: number;
+  /** Fetch transactions before this signature (for pagination) */
+  before?: string;
+  /** Fetch transactions until this signature */
+  until?: string;
+  /** Commitment level for transaction confirmation */
+  commitment?: 'finalized' | 'confirmed' | 'processed';
+}
+
+/**
+ * Transaction pagination information
+ */
+export interface TransactionPagination {
+  /** Current page number */
+  page: number;
+  /** Number of transactions per page */
+  perPage: number;
+  /** Total number of transactions */
+  total: number;
+  /** Whether there are more transactions available */
+  hasMore: boolean;
+  /** Last signature on this page (for next page pagination) */
+  lastSignature?: string;
+}
+
+/**
+ * Transaction summary by page
+ */
+export interface TransactionPageSummary {
+  /** Page number */
+  pageNumber: number;
+  /** Filename where transactions are stored */
+  filename: string;
+  /** Number of transactions in this page */
+  transactionCount: number;
+  /** Last signature in this page */
+  lastSignature: string;
+  /** Last block time in this page */
+  lastBlockTime: number | null;
+  /** Formatted last block time */
+  lastBlockTimeFormatted: string;
+  /** Timestamp when page was created */
+  timestamp: number;
+}
+
+/**
+ * Complete transaction history summary
+ */
+export interface TransactionsSummary {
+  /** When the transactions were last fetched */
+  lastFetched: string;
+  /** Total number of pages */
+  totalPages: number;
+  /** Total number of transactions */
+  totalTransactions: number;
+  /** Wallet creation date (earliest transaction) */
+  walletCreationDate: string;
+  /** Earliest transaction details */
+  earliestTransaction: TransactionSignature | null;
+  /** Summary of each page */
+  pages: TransactionPageSummary[];
+}
+
+/**
+ * Response for transaction history API
+ */
+export interface TransactionsResult {
+  /** Request success status */
+  success: boolean;
+  /** Wallet address */
+  address: string;
+  /** Array of transactions */
+  transactions: TransactionSignature[];
+  /** Pagination information */
+  pagination: TransactionPagination;
+  /** Summary information */
+  summary?: {
+    /** Total transactions found */
+    totalTransactions: number;
+    /** Wallet creation date */
+    walletCreationDate?: string;
+    /** Earliest transaction */
+    earliestTransaction?: TransactionSignature;
+  };
+  /** Request timestamp */
+  timestamp: string;
+  /** Error message if any */
+  error?: string;
+}
+
+/**
+ * Configuration for TransactionManager
+ */
+export interface TransactionManagerConfig {
+  /** Solana RPC endpoint URL */
+  rpcEndpoint: string;
+  /** Request timeout in milliseconds (default: 30000) */
+  timeout?: number;
+  /** Maximum transactions to fetch per request (default: 100) */
+  batchSize?: number;
+  /** Maximum total transactions to fetch (default: 2000) */
+  maxTransactions?: number;
+  /** Custom headers for RPC requests */
+  customHeaders?: Record<string, string>;
+}
+
+/**
+ * Batch transactions request
+ */
+export interface BatchTransactionsRequest {
+  /** Array of wallet addresses */
+  addresses: string[];
+  /** Options for fetching transactions */
+  options?: GetTransactionsOptions;
+}
+
+/**
+ * Batch transactions response
+ */
+export interface BatchTransactionsResponse {
+  /** Request success status */
+  success: boolean;
+  /** Results for each address */
+  results: {
+    /** Wallet address */
+    address: string;
+    /** Transaction result */
+    result: TransactionsResult;
+  }[];
+  /** Overall statistics */
+  stats: {
+    /** Number of successful requests */
+    successful: number;
+    /** Number of failed requests */
+    failed: number;
+    /** Total processing time */
+    totalTime: number;
+  };
+  /** Request timestamp */
+  timestamp: string;
+}
