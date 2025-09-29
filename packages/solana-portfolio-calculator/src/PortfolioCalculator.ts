@@ -11,7 +11,7 @@ import {
   TokenMetadata
 } from './types';
 import { getTokenAccounts, isValidSolanaAddress } from './utils/tokenAccounts';
-import { getTokenMetadata } from './utils/metadata2';
+import { getTokenMetadata } from './utils/metadata';
 
 /**
  * Main class for calculating Solana wallet portfolios

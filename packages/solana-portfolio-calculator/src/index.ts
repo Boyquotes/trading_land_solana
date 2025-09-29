@@ -8,7 +8,7 @@ export * from './types.js';
 
 // Export utilities
 export { getTokenAccounts, isValidSolanaAddress } from './utils/tokenAccounts.js';
-export { getTokenMetadata, getTokenInfoFromRegistry } from './utils/metadata2.js';
+export { getTokenMetadata, getTokenInfoFromRegistry } from './utils/metadata.js';
 
 // Default export for convenience
 export { PortfolioCalculator as default } from './PortfolioCalculator.js';
