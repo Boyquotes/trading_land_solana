@@ -1,18 +1,48 @@
 import { PortfolioAPIServer } from '../index';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 // Load environment variables from .env files
-// Try to load from current directory and parent directories
-const envPath = path.resolve(process.cwd(), '.env');
-console.log(`🔧 Loading .env from: ${envPath}`);
-const result = dotenv.config({ path: envPath });
+// Try to load from multiple possible locations
+const possibleEnvPaths = [
+  // 1. Current working directory
+  path.resolve(process.cwd(), '.env'),
+  // 2. Script's directory (two levels up from src/examples)
+  path.resolve(__dirname, '../../.env'),
+  // 3. Package root directory
+  path.resolve(__dirname, '../../../solana-portfolio-calculator/.env'),
+  // 4. Relative to the package directory if run from parent
+  path.resolve(process.cwd(), 'packages/solana-portfolio-calculator/.env')
+];
 
-if (result.error) {
-  console.log(`⚠️  Warning: Could not load .env file: ${result.error.message}`);
+let envLoaded = false;
+let loadedFrom = '';
+
+for (const envPath of possibleEnvPaths) {
+  console.log(`🔧 Trying to load .env from: ${envPath}`);
+  
+  if (fs.existsSync(envPath)) {
+    const result = dotenv.config({ path: envPath });
+    
+    if (!result.error) {
+      console.log(`✅ .env file loaded successfully from: ${envPath}`);
+      envLoaded = true;
+      loadedFrom = envPath;
+      break;
+    } else {
+      console.log(`⚠️  Could not parse .env file at ${envPath}: ${result.error.message}`);
+    }
+  } else {
+    console.log(`📍 .env file not found at: ${envPath}`);
+  }
+}
+
+if (!envLoaded) {
+  console.log(`⚠️  Warning: Could not load any .env file from attempted paths`);
   console.log('📍 Will use environment variables or defaults');
 } else {
-  console.log('✅ .env file loaded successfully');
+  console.log(`✅ Environment variables loaded from: ${loadedFrom}`);
 }
 
 // Simple server launcher
