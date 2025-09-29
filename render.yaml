@@ -27,6 +27,8 @@ services:
         value: production
       - key: PORT
         value: 4000
+      - key: HTTPS
+        value: true
       - key: NEXT_PUBLIC_RPC_URL
         value: https://mainnet.helius-rpc.com/?api-key=afaeaa09-73d8-4eaf-bffa-c30ea047ec58
       - key: NEXT_PUBLIC_SERVER_URL
