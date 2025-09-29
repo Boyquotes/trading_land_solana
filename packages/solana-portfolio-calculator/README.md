@@ -11,6 +11,8 @@ A powerful TypeScript library for calculating Solana wallet portfolios with comp
 - **Type Safety**: Full TypeScript support with comprehensive type definitions
 - **Caching Support**: Built-in interfaces for implementing custom caching strategies
 - **HTTP API Server**: Optional Express.js server for REST API deployment
+- **Transaction History**: Complete transaction history with pagination and rate limiting
+- **Rate Limiting**: Built-in protection against RPC 429 errors with exponential backoff
 - **Batch Processing**: Calculate multiple portfolios simultaneously
 - **Error Handling**: Comprehensive error types and graceful fallbacks
 
@@ -366,6 +368,7 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 - GitHub Issues: [Report bugs or request features](https://github.com/trading-land/solana-portfolio-calculator/issues)
 - Documentation: [Full API documentation](https://trading-land.github.io/solana-portfolio-calculator)
+- Rate Limiting Guide: [RATE_LIMITING.md](RATE_LIMITING.md) - Prevent 429 errors
 - Email: support@trading-land.com
 
 ## 🔗 Related Projects

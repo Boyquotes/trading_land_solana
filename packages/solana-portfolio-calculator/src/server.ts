@@ -24,11 +24,16 @@ export class PortfolioAPIServer {
     this.app = express();
     this.calculator = new PortfolioCalculator(config);
     
-    // Create transaction manager with the same RPC endpoint
+    // Create transaction manager with conservative rate limiting settings
     const transactionConfig: TransactionManagerConfig = {
       rpcEndpoint: config.rpcEndpoint,
       timeout: config.timeout,
-      customHeaders: config.customHeaders
+      customHeaders: config.customHeaders,
+      batchSize: 50, // Smaller batch size to be gentler on RPC
+      rateLimitDelay: 800, // 800ms delay between requests 
+      maxRetries: 5, // More retries for robustness
+      retryBaseDelay: 1500, // Longer initial retry delay
+      enableRateLimiting: true
     };
     this.transactionManager = new TransactionManager(transactionConfig);
     this.port = port;

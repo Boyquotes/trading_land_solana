@@ -28,6 +28,10 @@ export class TransactionManager {
       timeout: 30000,
       batchSize: 100,
       maxTransactions: 2000,
+      rateLimitDelay: 500,
+      maxRetries: 3,
+      retryBaseDelay: 1000,
+      enableRateLimiting: true,
       ...config
     };
 
@@ -49,6 +53,54 @@ export class TransactionManager {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Sleep for a specified amount of time
+   * @param ms - Milliseconds to sleep
+   */
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Check if an error is a rate limit error (429)
+   * @param error - The error to check
+   */
+  private isRateLimitError(error: any): boolean {
+    if (error?.message?.includes('429') || error?.message?.includes('Too Many Requests')) {
+      return true;
+    }
+    if (error?.code === 429 || error?.status === 429) {
+      return true;
+    }
+    if (error?.response?.status === 429) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Make a rate-limited RPC call with retry logic
+   * @param fn - Function to call
+   * @param retryCount - Current retry count
+   */
+  private async makeRateLimitedCall<T>(
+    fn: () => Promise<T>,
+    retryCount: number = 0
+  ): Promise<T> {
+    try {
+      const result = await fn();
+      return result;
+    } catch (error) {
+      if (this.isRateLimitError(error) && retryCount < this.config.maxRetries!) {
+        const delay = this.config.retryBaseDelay! * Math.pow(2, retryCount);
+        console.log(`[TransactionManager] Rate limited (429). Retrying in ${delay}ms (attempt ${retryCount + 1}/${this.config.maxRetries})`);
+        await this.sleep(delay);
+        return this.makeRateLimitedCall(fn, retryCount + 1);
+      }
+      throw error;
     }
   }
 
@@ -93,8 +145,10 @@ export class TransactionManager {
         fetchOptions.until = options.until;
       }
 
-      // Fetch transaction signatures
-      const signatures = await this.connection.getSignaturesForAddress(publicKey, fetchOptions);
+      // Fetch transaction signatures with rate limiting
+      const signatures = await this.makeRateLimitedCall(async () => {
+        return await this.connection.getSignaturesForAddress(publicKey, fetchOptions);
+      });
       
       console.log(`[TransactionManager] Found ${signatures.length} transaction signatures`);
 
@@ -189,7 +243,7 @@ export class TransactionManager {
       let hasMore = true;
       let pageNumber = 1;
 
-      // Fetch transactions in batches
+      // Fetch transactions in batches with rate limiting
       while (allTransactions.length < this.config.maxTransactions! && hasMore) {
         const fetchOptions: any = {
           limit: this.config.batchSize,
@@ -200,7 +254,11 @@ export class TransactionManager {
           fetchOptions.before = lastSignature;
         }
 
-        const signatures = await this.connection.getSignaturesForAddress(publicKey, fetchOptions);
+        console.log(`[TransactionManager] Fetching page ${pageNumber} (batch size: ${this.config.batchSize})`);
+
+        const signatures = await this.makeRateLimitedCall(async () => {
+          return await this.connection.getSignaturesForAddress(publicKey, fetchOptions);
+        });
         
         if (signatures.length < this.config.batchSize!) {
           hasMore = false;
@@ -226,6 +284,12 @@ export class TransactionManager {
         }
 
         pageNumber++;
+
+        // Add rate limiting delay between requests (except for the last request)
+        if (this.config.enableRateLimiting && hasMore && allTransactions.length < this.config.maxTransactions!) {
+          console.log(`[TransactionManager] Rate limiting: waiting ${this.config.rateLimitDelay}ms before next batch`);
+          await this.sleep(this.config.rateLimitDelay!);
+        }
       }
 
       // Calculate summary

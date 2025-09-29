@@ -399,6 +399,14 @@ export interface TransactionManagerConfig {
   maxTransactions?: number;
   /** Custom headers for RPC requests */
   customHeaders?: Record<string, string>;
+  /** Delay between batch requests in milliseconds to avoid rate limiting (default: 500) */
+  rateLimitDelay?: number;
+  /** Maximum number of retry attempts for rate limited requests (default: 3) */
+  maxRetries?: number;
+  /** Initial delay for exponential backoff retry in milliseconds (default: 1000) */
+  retryBaseDelay?: number;
+  /** Whether to enable aggressive rate limiting for public RPC endpoints (default: true) */
+  enableRateLimiting?: boolean;
 }
 
 /**
